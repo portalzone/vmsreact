@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 
-
 class CheckInOut extends Model
 {
     use HasFactory, LogsActivity;
@@ -29,17 +28,16 @@ class CheckInOut extends Model
         'checked_out_at' => 'datetime',
     ];
 
-        /**
+    /**
      * Spatie activity log settings
      */
     public function getActivitylogOptions(): LogOptions
-{
-    return LogOptions::defaults()
-        ->logAll()
-        ->useLogName('check_in_out') // change based on model
-        ->logOnlyDirty();       // logs only changed fields
-}
-
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->useLogName('check_in_out')
+            ->logOnlyDirty();
+    }
 
     /**
      * Relationship: Each check-in/out belongs to a vehicle
@@ -57,12 +55,10 @@ class CheckInOut extends Model
         return $this->belongsTo(Driver::class)->with('user');
     }
 
-    
-
     /**
      * Relationship: User who checked the vehicle in
      */
-    public function checkedInBy()
+    public function checkedInByUser()
     {
         return $this->belongsTo(User::class, 'checked_in_by');
     }
@@ -70,27 +66,16 @@ class CheckInOut extends Model
     /**
      * Relationship: User who checked the vehicle out
      */
-    public function checkedOutBy()
+    public function checkedOutByUser()
     {
         return $this->belongsTo(User::class, 'checked_out_by');
     }
 
     /**
-     * Optional: Scope to filter only currently checked-in vehicles
+     * Scope to filter only currently checked-in vehicles
      */
     public function scopeCurrentlyCheckedIn($query)
     {
         return $query->whereNull('checked_out_at');
     }
-
-    public function checkedInByUser()
-{
-    return $this->belongsTo(User::class, 'checked_in_by');
-}
-
-public function checkedOutByUser()
-{
-    return $this->belongsTo(User::class, 'checked_out_by');
-}
-
 }

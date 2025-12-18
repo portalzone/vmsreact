@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import axios from '../services/api';
+import api from '../services/api'; // ✅ Changed from 'axios' to 'api'
 import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext(null);
@@ -13,7 +13,7 @@ export const AuthProvider = ({ children }) => {
   // Set axios authorization header when token changes
   useEffect(() => {
     if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`; // ✅ Changed
       fetchUser();
     } else {
       setLoading(false);
@@ -27,8 +27,8 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const response = await axios.get('/me');
-      setUser(response.data.user);
+      const response = await api.get('/me'); // ✅ Changed
+      setUser(response.data.user || response.data);
     } catch (error) {
       console.error('Failed to fetch user:', error);
       logout();
@@ -37,43 +37,64 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (credentials) => {
+  const login = async ({ email, password }) => {
     try {
-      const response = await axios.post('/login', credentials);
-      const { token: newToken, user: userData } = response.data;
+      const response = await api.post('/login', {
+        email,
+        password,
+      });
 
-      setToken(newToken);
-      setUser(userData);
-      localStorage.setItem('token', newToken);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+      const { user, token } = response.data;
 
-      return { success: true };
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      setUser(user);
+      setToken(token);
+      
     } catch (error) {
+      console.error('Login error:', error);
       throw error;
     }
   };
 
   const logout = async () => {
     try {
-      await axios.post('/logout');
+      await api.post('/logout'); // ✅ Changed
     } catch (error) {
       console.warn('Logout request failed or was already invalid');
     }
 
     localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
+    localStorage.removeItem('user');
+    delete api.defaults.headers.common['Authorization']; // ✅ Changed
     setToken(null);
     setUser(null);
-    navigate('/');
+    navigate('/login');
   };
 
-  // Helper functions for role checking (supports Spatie multi-role)
+  // Helper functions for role checking
   const hasRole = (role) => {
-    return user?.roles?.some((r) => r.name === role);
+    if (!user) return false;
+    
+    // Check new format (roles array)
+    if (user.roles && Array.isArray(user.roles)) {
+      return user.roles.some(r => r.name === role);
+    }
+    
+    // Fallback: check old format (role string)
+    if (user.role) {
+      return user.role === role;
+    }
+    
+    return false;
   };
 
   const hasAnyRole = (roles) => {
-    return user?.roles?.some((r) => roles.includes(r.name));
+    if (!user || !roles || !Array.isArray(roles)) return false;
+    return roles.some(role => hasRole(role));
   };
 
   const value = {

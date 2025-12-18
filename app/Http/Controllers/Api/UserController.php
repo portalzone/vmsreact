@@ -146,28 +146,35 @@ public function vehicleOwners()
         'name'     => 'required|string|max:100',
         'email'    => 'required|email|unique:users',
         'password' => 'required|string|min:6',
-        'role'     => 'required|string|exists:roles,name',
+        'role'     => 'required|string|exists:roles,name', // ✅ Role must exist
+        'phone'    => 'nullable|string|max:20', // Add phone
     ]);
 
     // ⛔ Restrict based on current user's role
-    $user = auth()->user();
-    $restricted = [
-        'gate_security' => ['staff', 'visitor'],
-        'manager'       => ['staff', 'visitor', 'driver', 'vehicle_owner', 'gate_security'],
-    ];
-
-    foreach ($restricted as $roleName => $allowedRoles) {
-        if ($user->hasRole($roleName) && !in_array($validated['role'], $allowedRoles)) {
+    $authUser = auth()->user();
+    
+    // Gate security can ONLY create visitors
+    if ($authUser->hasRole('gate_security') && $validated['role'] !== 'visitor') {
+        return response()->json(['message' => 'Gate security can only create visitor users.'], 403);
+    }
+    
+    // Manager restrictions
+    if ($authUser->hasRole('manager')) {
+        $allowedRoles = ['staff', 'visitor', 'driver', 'vehicle_owner', 'gate_security'];
+        if (!in_array($validated['role'], $allowedRoles)) {
             return response()->json(['message' => 'Unauthorized role assignment.'], 403);
         }
     }
 
+    // Create user
     $user = User::create([
         'name'     => $validated['name'],
         'email'    => $validated['email'],
         'password' => Hash::make($validated['password']),
+        'phone'    => $validated['phone'] ?? null,
     ]);
 
+    // Assign role with correct guard
     $role = Role::where('name', $validated['role'])->where('guard_name', 'api')->first();
     if (!$role) {
         return response()->json(['message' => 'Invalid role for API guard.'], 422);
@@ -180,7 +187,6 @@ public function vehicleOwners()
         'data'    => $user->load('roles:id,name'),
     ], 201);
 }
-
 
     // ✅ Show user with roles
     public function show($id)

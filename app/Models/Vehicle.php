@@ -21,6 +21,15 @@ class Vehicle extends Model
         'owner_id',
         'created_by',
         'updated_by',
+        'color',
+    'vin',
+    'status',
+    'fuel_type',
+    'seating_capacity',
+    'mileage',
+    'purchase_date',
+    'purchase_price',
+    'notes',
     ];
 
     /**
@@ -65,10 +74,10 @@ public function driver()
     return $this->hasOne(Driver::class); // Current assigned driver
 }
 
-    public function drivers()
-    {
-        return $this->hasMany(Driver::class);
-    }
+    // public function drivers()
+    // {
+    //     return $this->hasMany(Driver::class);
+    // }
 
 
     /**

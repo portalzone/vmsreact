@@ -27,10 +27,12 @@ import DriverProfilePage from '../pages/Drivers/DriverProfilePage';
 import VehiclesPage from '../pages/Vehicles/VehiclesPage';
 import VehicleFormPage from '../pages/Vehicles/VehicleFormPage';
 import VehicleWithin from '../pages/Vehicles/VehicleWithin';
+import VehicleDetailPage from '../pages/Vehicles/VehicleDetailPage';
 
 // Check-Ins
 import CheckInsPage from '../pages/CheckIns/CheckInsPage';
 import CheckInFormPage from '../pages/CheckIns/CheckInFormPage';
+import CheckInDetailPage from '../pages/CheckIns/CheckInDetailPage'; 
 
 // Maintenance
 import MaintenancePage from '../pages/Maintenance/MaintenancePage';
@@ -121,6 +123,7 @@ const AppRoutes = () => {
           {/* Vehicles */}
           <Route element={<ProtectedRoute roles={['admin', 'manager', 'vehicle_owner', 'gate_security']} />}>
             <Route path="/vehicles" element={<VehiclesPage />} />
+            <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
           </Route>
           
           <Route element={<ProtectedRoute roles={['admin', 'manager', 'gate_security']} />}>
@@ -137,6 +140,7 @@ const AppRoutes = () => {
             <Route path="/checkins" element={<CheckInsPage />} />
             <Route path="/checkins/new" element={<CheckInFormPage />} />
             <Route path="/checkins/:id/edit" element={<CheckInFormPage />} />
+            <Route path="/checkins/:id" element={<CheckInDetailPage />} />
           </Route>
 
           {/* Maintenance */}

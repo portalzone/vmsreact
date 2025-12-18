@@ -33,6 +33,8 @@ class User extends Authenticatable
         'phone',
     ];
 
+    protected $with = ['roles'];
+
     /**
      * The attributes that should be hidden for serialization.
      *

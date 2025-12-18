@@ -38,27 +38,32 @@ class AuthController extends Controller
 
     // ✅ Login
     public function login(Request $request)
-    {
-        $request->validate([
-            'email'    => 'required|email',
-            'password' => 'required|string',
-        ]);
+{
+    $request->validate([
+        'email'    => 'required|email',
+        'password' => 'required|string',
+    ]);
 
-        $user = User::where('email', $request->email)->first();
+    $user = User::where('email', $request->email)->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        $token = $user->createToken('api-token')->plainTextToken;
-        $role = $user->getRoleNames()->first(); // string
-
-        return response()->json([
-            'token' => $token,
-            'user'  => $user->only(['id', 'name', 'email']) + ['role' => $role],
-        ]);
+    if (! $user || ! Hash::check($request->password, $user->password)) {
+        return response()->json(['message' => 'Invalid credentials'], 401);
     }
 
+    // Load roles relationship for the roles array
+    $user->load('roles');
+    
+    $token = $user->createToken('api-token')->plainTextToken;
+    $role = $user->getRoleNames()->first(); // Keep this for backwards compatibility
+
+    return response()->json([
+        'token' => $token,
+        'user'  => $user->only(['id', 'name', 'email']) + [
+            'role' => $role,      // Old format (string) - for compatibility
+            'roles' => $user->roles  // New format (array) - for ProtectedRoute
+        ],
+    ]);
+}
     // ✅ Logout
     public function logout(Request $request)
     {
@@ -70,13 +75,17 @@ class AuthController extends Controller
 public function me(Request $request)
 {
     $user = $request->user();
-    $role = $user->getRoleNames()->first(); // Spatie gives you the actual name string
+    $user->load('roles');
+    
+    $role = $user->getRoleNames()->first();
 
     return response()->json([
-        'user' => $user->only(['id', 'name', 'email']) + ['role' => $role],
+        'user' => $user->only(['id', 'name', 'email']) + [
+            'role' => $role,
+            'roles' => $user->roles
+        ],
     ]);
 }
-
 
 
 
