@@ -11,76 +11,67 @@ use Illuminate\Support\Facades\Auth;
 
 class VehicleController extends Controller
 {
-public function index(Request $request)
-{
-    $this->authorizeAccess('view');
+    public function index(Request $request)
+    {
+        $this->authorizeAccess('view');
 
-    $query = Vehicle::with(['owner', 'creator', 'driver.user']);
+        $query = Vehicle::with(['owner', 'creator', 'driver.user']);
 
-    // 🔍 Search by ID, manufacturer, model, or plate_number
-    if ($search = $request->input('search')) {
-        $query->where(function ($q) use ($search) {
-            $q->where('id', $search)
-              ->orWhere('manufacturer', 'like', "%{$search}%")
-              ->orWhere('model', 'like', "%{$search}%")
-              ->orWhere('plate_number', 'like', "%{$search}%");
-        });
-    }
+        // 🔍 Search by ID, manufacturer, model, or plate_number
+        if ($search = $request->input('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('id', $search)
+                  ->orWhere('manufacturer', 'like', "%{$search}%")
+                  ->orWhere('model', 'like', "%{$search}%")
+                  ->orWhere('plate_number', 'like', "%{$search}%");
+            });
+        }
 
-    // 🧩 Filter by ownership_type
-    if ($ownershipType = $request->input('ownership_type')) {
-        $query->where('ownership_type', $ownershipType);
+        // 🧩 Filter by ownership_type
+        if ($ownershipType = $request->input('ownership_type')) {
+            $query->where('ownership_type', $ownershipType);
 
-        // If ownership_type is 'individual', filter by individual_type
-        if ($ownershipType === 'individual') {
-            if ($individualType = $request->input('individual_type')) {
-                $query->where('individual_type', $individualType);
+            // If ownership_type is 'individual', filter by individual_type
+            if ($ownershipType === 'individual') {
+                if ($individualType = $request->input('individual_type')) {
+                    $query->where('individual_type', $individualType);
+                }
             }
         }
+
+        // 🧑‍✈️ Filter by driver_id
+        if ($driverId = $request->input('driver_id')) {
+            $query->whereHas('driver', function ($q) use ($driverId) {
+                $q->where('id', $driverId);
+            });
+        }
+
+        // 📌 Role-based restrictions
+        $user = auth()->user();
+        if ($user->hasRole('driver')) {
+            $query->whereHas('driver', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            });
+        } elseif ($user->hasRole('vehicle_owner')) {
+            $query->where('owner_id', $user->id);
+        } elseif ($user->hasRole('gate_security')) {
+            // Gate security can only see visitor vehicles
+            $query->where('ownership_type', 'individual')
+                  ->where('individual_type', 'visitor');
+        }
+        // Admin & Manager see all
+
+        // 🔁 Sorting
+        $sortBy = $request->input('sort_by', 'id');
+        $sortOrder = $request->input('order', 'asc');
+        $query->orderBy($sortBy, $sortOrder);
+
+        return response()->json(
+            $query->paginate($request->input('per_page', 15))
+        );
     }
 
-    // 🧑‍✈️ Filter by driver_id
-    if ($driverId = $request->input('driver_id')) {
-        $query->whereHas('driver', function ($q) use ($driverId) {
-            $q->where('id', $driverId);
-        });
-    }
-
-    // 📌 Role-based restrictions
-    $user = auth()->user();
-    if ($user->hasRole('driver')) {
-        $query->whereHas('driver', function ($q) use ($user) {
-            $q->where('user_id', $user->id);
-        });
-    } elseif ($user->hasRole('vehicle_owner')) {
-        $query->where('owner_id', $user->id);
-    } elseif ($user->hasRole('gate_security')) {
-        // Gate security can only see visitor vehicles
-        $query->where('ownership_type', 'individual')
-              ->where('individual_type', 'visitor');
-    }
-    // Admin & Manager see all
-
-    // 🔁 Sorting
-    $sortBy = $request->input('sort_by', 'id');
-    $sortOrder = $request->input('order', 'asc');
-    $query->orderBy($sortBy, $sortOrder);
-
-    return response()->json(
-        $query->paginate($request->input('per_page', 15))
-    );
-}
-
-    // public function vehiclesWithinPremises()
-    // {
-    //     $vehicles = CheckInOut::with('vehicle', 'driver.user')
-    //         ->whereNull('checked_out_at')
-    //         ->latest()
-    //         ->get();
-
-    //     return response()->json($vehicles);
-    // }
-        public function vehiclesWithinPremises()
+    public function vehiclesWithinPremises()
     {
         $vehicles = CheckInOut::with([
                 'vehicle:id,manufacturer,model,plate_number',
@@ -134,6 +125,16 @@ public function index(Request $request)
             'ownership_type'   => 'required|in:organization,individual',
             'individual_type'  => 'nullable|in:staff,visitor,vehicle_owner',
             'owner_id'         => 'nullable|exists:users,id',
+            // New fields
+            'color'            => 'nullable|string|max:50',
+            'vin'              => 'nullable|string|max:17|unique:vehicles',
+            'status'           => 'nullable|in:active,maintenance,inactive,sold',
+            'fuel_type'        => 'nullable|in:petrol,diesel,electric,hybrid,cng,lpg',
+            'seating_capacity' => 'nullable|integer|min:1|max:100',
+            'mileage'          => 'nullable|numeric|min:0',
+            'purchase_date'    => 'nullable|date',
+            'purchase_price'   => 'nullable|numeric|min:0',
+            'notes'            => 'nullable|string',
         ]);
 
         if ($validated['ownership_type'] === 'individual') {
@@ -170,7 +171,17 @@ public function index(Request $request)
             'ownership_type'   => 'required|in:organization,individual',
             'individual_type'  => 'nullable|in:staff,visitor,vehicle_owner',
             'owner_id'         => 'nullable|exists:users,id',
-        ]);
+            // New fields
+            'color'            => 'nullable|string|max:50',
+            'vin'              => 'nullable|string|max:17|unique:vehicles,vin,' . $vehicle->id,
+            'status'           => 'nullable|in:active,maintenance,inactive,sold',
+            'fuel_type'        => 'nullable|in:petrol,diesel,electric,hybrid,cng,lpg',
+            'seating_capacity' => 'nullable|integer|min:1|max:100',
+            'mileage'          => 'nullable|numeric|min:0',
+            'purchase_date'    => 'nullable|date',
+            'purchase_price'   => 'nullable|numeric|min:0',
+            'notes'            => 'nullable|string',
+        ]); // ✅ Fixed: Added missing closing bracket
 
         if ($validated['ownership_type'] === 'individual') {
             if (!isset($validated['individual_type'])) {
@@ -212,8 +223,6 @@ public function index(Request $request)
 
         return response()->json($vehicles);
     }
-
-
 
     public function show($id)
     {
