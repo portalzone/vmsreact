@@ -8,68 +8,42 @@ use App\Models\CheckInOut;
 use Illuminate\Http\Request;
 use App\Models\Driver;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Requests\ImageUploadRequest;
 
 class VehicleController extends Controller
 {
     public function index(Request $request)
-    {
-        $this->authorizeAccess('view');
+{
+    $this->authorizeAccess('view');
 
-        $query = Vehicle::with(['owner', 'creator', 'driver.user']);
+    $query = Vehicle::with(['owner', 'driver.user', 'creator', 'editor']);
 
-        // 🔍 Search by ID, manufacturer, model, or plate_number
-        if ($search = $request->input('search')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('id', $search)
-                  ->orWhere('manufacturer', 'like', "%{$search}%")
-                  ->orWhere('model', 'like', "%{$search}%")
-                  ->orWhere('plate_number', 'like', "%{$search}%");
-            });
-        }
+    // Apply filters using the new filter scope
+    $query->filter($request->all());
 
-        // 🧩 Filter by ownership_type
-        if ($ownershipType = $request->input('ownership_type')) {
-            $query->where('ownership_type', $ownershipType);
-
-            // If ownership_type is 'individual', filter by individual_type
-            if ($ownershipType === 'individual') {
-                if ($individualType = $request->input('individual_type')) {
-                    $query->where('individual_type', $individualType);
-                }
-            }
-        }
-
-        // 🧑‍✈️ Filter by driver_id
-        if ($driverId = $request->input('driver_id')) {
-            $query->whereHas('driver', function ($q) use ($driverId) {
-                $q->where('id', $driverId);
-            });
-        }
-
-        // 📌 Role-based restrictions
-        $user = auth()->user();
-        if ($user->hasRole('driver')) {
-            $query->whereHas('driver', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            });
-        } elseif ($user->hasRole('vehicle_owner')) {
-            $query->where('owner_id', $user->id);
-        } elseif ($user->hasRole('gate_security')) {
-            // Gate security can only see visitor vehicles
-            $query->where('ownership_type', 'individual')
-                  ->where('individual_type', 'visitor');
-        }
-        // Admin & Manager see all
-
-        // 🔁 Sorting
-        $sortBy = $request->input('sort_by', 'id');
-        $sortOrder = $request->input('order', 'asc');
-        $query->orderBy($sortBy, $sortOrder);
-
-        return response()->json(
-            $query->paginate($request->input('per_page', 15))
-        );
+    // 📌 Role-based restrictions (keep existing logic)
+    $user = auth()->user();
+    if ($user->hasRole('driver')) {
+        $query->whereHas('driver', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+        });
+    } elseif ($user->hasRole('vehicle_owner')) {
+        $query->where('owner_id', $user->id);
+    } elseif ($user->hasRole('gate_security')) {
+        $query->where('ownership_type', 'individual')
+              ->where('individual_type', 'visitor');
     }
+
+    // 🔁 Sorting
+    $sortBy = $request->input('sort_by', 'created_at');
+    $sortOrder = $request->input('sort_order', 'desc');
+    $query->orderBy($sortBy, $sortOrder);
+
+    // Pagination
+    $perPage = $request->input('per_page', 15);
+    
+    return response()->json($query->paginate($perPage));
+}
 
     public function vehiclesWithinPremises()
     {
@@ -181,7 +155,7 @@ class VehicleController extends Controller
             'purchase_date'    => 'nullable|date',
             'purchase_price'   => 'nullable|numeric|min:0',
             'notes'            => 'nullable|string',
-        ]); // ✅ Fixed: Added missing closing bracket
+        ]);
 
         if ($validated['ownership_type'] === 'individual') {
             if (!isset($validated['individual_type'])) {
@@ -266,11 +240,145 @@ class VehicleController extends Controller
         return response()->json($vehicles);
     }
 
+    /**
+     * Upload vehicle photo
+     */
+    public function uploadPhoto(Request $request, Vehicle $vehicle)
+    {
+        // Check authorization
+        $this->authorizeAccess('update');
+
+        // Validate image
+        $request->validate([
+            'image' => [
+                'required',
+                'image',
+                'mimes:jpeg,jpg,png,gif,webp',
+                'max:5120', // 5MB max
+            ],
+        ]);
+
+        try {
+            $photo = $vehicle->uploadImage($request->file('image'), 'vehicles');
+            
+            // Get current photos
+            $photos = $vehicle->photos ?? [];
+            $photos[] = $photo;
+            
+            // Update vehicle
+            $vehicle->update([
+                'photos' => $photos,
+                'primary_photo' => $vehicle->primary_photo ?? $photo, // Set as primary if first photo
+                'updated_by' => Auth::id(),
+            ]);
+            
+            return response()->json([
+                'message' => 'Photo uploaded successfully',
+                'photo' => $photo,
+                'photo_url' => $vehicle->getImageUrl($photo),
+                'vehicle' => $vehicle->load(['driver.user', 'owner', 'creator', 'editor'])
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Photo upload failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to upload photo',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete vehicle photo
+     */
+    public function deletePhoto(Request $request, Vehicle $vehicle)
+    {
+        // Check authorization
+        $this->authorizeAccess('update');
+
+        $request->validate([
+            'photo' => 'required|string'
+        ]);
+
+        try {
+            $photoToDelete = $request->photo;
+            
+            // Delete from storage
+            $vehicle->deleteImage($photoToDelete);
+            
+            // Remove from photos array
+            $photos = $vehicle->photos ?? [];
+            $photos = array_filter($photos, fn($photo) => $photo !== $photoToDelete);
+            
+            // Reset primary photo if it was deleted
+            $primaryPhoto = $vehicle->primary_photo;
+            if ($primaryPhoto === $photoToDelete) {
+                $primaryPhoto = $photos[0] ?? null;
+            }
+            
+            // Update vehicle
+            $vehicle->update([
+                'photos' => array_values($photos),
+                'primary_photo' => $primaryPhoto,
+                'updated_by' => Auth::id(),
+            ]);
+            
+            return response()->json([
+                'message' => 'Photo deleted successfully',
+                'vehicle' => $vehicle->load(['driver.user', 'owner', 'creator', 'editor'])
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Photo deletion failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to delete photo',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Set primary photo
+     */
+    public function setPrimaryPhoto(Request $request, Vehicle $vehicle)
+    {
+        // Check authorization
+        $this->authorizeAccess('update');
+
+        $request->validate([
+            'photo' => 'required|string'
+        ]);
+
+        try {
+            $vehicle->update([
+                'primary_photo' => $request->photo,
+                'updated_by' => Auth::id(),
+            ]);
+            
+            return response()->json([
+                'message' => 'Primary photo updated successfully',
+                'vehicle' => $vehicle->load(['driver.user', 'owner', 'creator', 'editor'])
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Set primary photo failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to set primary photo',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function destroy($id)
     {
         $this->authorizeAccess('delete');
 
         $vehicle = Vehicle::findOrFail($id);
+        
+        // Delete all photos before deleting vehicle
+        if ($vehicle->photos) {
+            foreach ($vehicle->photos as $photo) {
+                $vehicle->deleteImage($photo);
+            }
+        }
+        
         $vehicle->delete();
 
         return response()->json(['message' => 'Vehicle deleted']);

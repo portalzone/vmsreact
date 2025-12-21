@@ -21,73 +21,83 @@ class AuthController extends Controller
         $user = User::create([
             'name'     => $validated['name'],
             'email'    => $validated['email'],
-            'password' => bcrypt($validated['password']),
+            'password' => Hash::make($validated['password']), // ✅ Changed bcrypt to Hash::make
         ]);
 
         // Optional: assign default role
-        // $user->assignRole('user');
+        // $user->assignRole('visitor');
 
         $token = $user->createToken('api-token')->plainTextToken;
+        
+        // Load roles
+        $user->load('roles');
         $role = $user->getRoleNames()->first(); // returns single role as string
 
         return response()->json([
             'token' => $token,
-            'user'  => $user->only(['id', 'name', 'email']) + ['role' => $role],
+            'user'  => $user->only(['id', 'name', 'email']) + [
+                'role' => $role,
+                'roles' => $user->roles
+            ],
         ], 201);
     }
 
-    // ✅ Login
+    // ✅ Login with tracking
     public function login(Request $request)
-{
-    $request->validate([
-        'email'    => 'required|email',
-        'password' => 'required|string',
-    ]);
+    {
+        $request->validate([
+            'email'    => 'required|email',
+            'password' => 'required|string',
+        ]);
 
-    $user = User::where('email', $request->email)->first();
+        $user = User::where('email', $request->email)->first();
 
-    if (! $user || ! Hash::check($request->password, $user->password)) {
-        return response()->json(['message' => 'Invalid credentials'], 401);
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+
+        // ✅ Track login (increment count and update timestamp)
+        $user->increment('login_count');
+        $user->last_login_at = now();
+        $user->save();
+
+        // Load roles relationship for the roles array
+        $user->load('roles');
+        
+        $token = $user->createToken('api-token')->plainTextToken;
+        $role = $user->getRoleNames()->first(); // Keep this for backwards compatibility
+
+        return response()->json([
+            'token' => $token,
+            'user'  => $user->only(['id', 'name', 'email']) + [
+                'role' => $role,           // Old format (string) - for compatibility
+                'roles' => $user->roles    // New format (array) - for ProtectedRoute
+            ],
+        ]);
     }
 
-    // Load roles relationship for the roles array
-    $user->load('roles');
-    
-    $token = $user->createToken('api-token')->plainTextToken;
-    $role = $user->getRoleNames()->first(); // Keep this for backwards compatibility
-
-    return response()->json([
-        'token' => $token,
-        'user'  => $user->only(['id', 'name', 'email']) + [
-            'role' => $role,      // Old format (string) - for compatibility
-            'roles' => $user->roles  // New format (array) - for ProtectedRoute
-        ],
-    ]);
-}
     // ✅ Logout
     public function logout(Request $request)
     {
         $request->user()->tokens()->delete();
-        return response()->json(['message' => 'Logged out']);
+        return response()->json(['message' => 'Logged out successfully']);
     }
 
-// 🔒 Get authenticated user
-public function me(Request $request)
-{
-    $user = $request->user();
-    $user->load('roles');
-    
-    $role = $user->getRoleNames()->first();
+    // 🔒 Get authenticated user
+    public function me(Request $request)
+    {
+        $user = $request->user();
+        $user->load('roles');
+        
+        $role = $user->getRoleNames()->first();
 
-    return response()->json([
-        'user' => $user->only(['id', 'name', 'email']) + [
-            'role' => $role,
-            'roles' => $user->roles
-        ],
-    ]);
-}
-
-
+        return response()->json([
+            'user' => $user->only(['id', 'name', 'email']) + [
+                'role' => $role,
+                'roles' => $user->roles
+            ],
+        ]);
+    }
 
     // ✅ Admin-only access control
     private function authorizeAccess(string $action)
@@ -103,8 +113,8 @@ public function me(Request $request)
 
         $allowedRoles = $map[$action] ?? [];
 
-        if (! $user || ! $user->hasAnyRole($allowedRoles)) {
-             \Log::warning("Unauthorized {$action} attempt by user ID {$user?->id}");
+        if (!$user || !$user->hasAnyRole($allowedRoles)) {
+            \Log::warning("Unauthorized {$action} attempt by user ID {$user?->id}");
             abort(403, 'Unauthorized for this action.');
         }
     }

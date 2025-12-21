@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Expense;
 use App\Models\Maintenance;
+use App\Models\User; // ✅ Added: Required for the Notification logic
 use Illuminate\Http\Request;
+use App\Notifications\ExpenseAlertNotification;
+use Illuminate\Support\Facades\Notification;
 
 class ExpenseController extends Controller
 {
@@ -51,25 +54,28 @@ class ExpenseController extends Controller
 
         $expense = Expense::create($validated);
 
+        // 🔔 Check if expense exceeds threshold
+        $threshold = 50000; // ₦50,000
+        if ($expense->amount > $threshold) {
+            // Notify admins and managers
+            $admins = User::role(['admin', 'manager'])->get();
+            Notification::send($admins, new ExpenseAlertNotification($expense, $threshold));
+        }
+
         // 🔁 Auto-complete maintenance if linked
-        // if (!empty($validated['maintenance_id'])) {
-        //     Maintenance::where('id', $validated['maintenance_id'])
-        //         ->update(['status' => 'Completed']);
-        // }
-
         if (!empty($validated['maintenance_id'])) {
-    Maintenance::where('id', $validated['maintenance_id'])
-        ->update([
-            'status' => 'Completed',
-            'cost'   => $validated['amount'] ?? 0, // update cost
-        ]);
-}
+            Maintenance::where('id', $validated['maintenance_id'])
+                ->update([
+                    'status' => 'Completed',
+                    'cost'   => $validated['amount'] ?? 0,
+                ]);
+        }
 
-
-        return response()->json(
-            $expense->load(['vehicle', 'maintenance', 'creator', 'updater']),
-            201
-        );
+        // ✅ Harmonized Return: Includes Message AND Full Data
+        return response()->json([
+            'message' => 'Expense created successfully',
+            'expense' => $expense->load(['vehicle', 'maintenance', 'creator', 'updater'])
+        ], 201);
     }
 
     // ✅ View a single expense
@@ -80,69 +86,66 @@ class ExpenseController extends Controller
     }
 
     // ✅ Update an expense
-public function update(Request $request, $id)
-{
-    $this->authorizeAccess('update');
+    public function update(Request $request, $id)
+    {
+        $this->authorizeAccess('update');
 
-    $expense = Expense::findOrFail($id);
+        $expense = Expense::findOrFail($id);
 
-    $validated = $request->validate([
-        'vehicle_id'     => 'sometimes|exists:vehicles,id',
-        'maintenance_id' => 'nullable|exists:maintenances,id',
-        'amount'         => 'sometimes|numeric',
-        'description'    => 'sometimes|string',
-        'date'           => 'sometimes|date',
-    ]);
+        $validated = $request->validate([
+            'vehicle_id'     => 'sometimes|exists:vehicles,id',
+            'maintenance_id' => 'nullable|exists:maintenances,id',
+            'amount'         => 'sometimes|numeric',
+            'description'    => 'sometimes|string',
+            'date'           => 'sometimes|date',
+        ]);
 
-    $validated['updated_by'] = auth()->id();
+        $validated['updated_by'] = auth()->id();
 
-    // 🔄 Handle maintenance ID update
-    if (array_key_exists('maintenance_id', $validated)) {
-        $oldMaintenanceId = $expense->maintenance_id;
+        // 🔄 Handle maintenance ID update
+        if (array_key_exists('maintenance_id', $validated)) {
+            $oldMaintenanceId = $expense->maintenance_id;
 
-        if ($oldMaintenanceId && $oldMaintenanceId !== $validated['maintenance_id']) {
-            // Optional: Revert old maintenance status
-            Maintenance::where('id', $oldMaintenanceId)
-                ->update(['status' => 'Pending']);
+            if ($oldMaintenanceId && $oldMaintenanceId !== $validated['maintenance_id']) {
+                // Optional: Revert old maintenance status
+                Maintenance::where('id', $oldMaintenanceId)
+                    ->update(['status' => 'Pending']);
+            }
+
+            if (!empty($validated['maintenance_id'])) {
+                // ✅ Set linked maintenance to Completed
+                Maintenance::where('id', $validated['maintenance_id'])
+                    ->update(['status' => 'Completed']);
+            }
         }
 
-        if (!empty($validated['maintenance_id'])) {
-            // ✅ Set linked maintenance to Completed
-            Maintenance::where('id', $validated['maintenance_id'])
-                ->update(['status' => 'Completed']);
+        $expense->update($validated);
+
+        // ✅ Update linked maintenance details (optional)
+        if ($expense->maintenance_id) {
+            $maintenanceUpdate = [];
+
+            // If the amount or description or date changed, sync it to maintenance
+            if (isset($validated['amount'])) {
+                $maintenanceUpdate['cost'] = $validated['amount'];
+            }
+            if (isset($validated['description'])) {
+                $maintenanceUpdate['description'] = $validated['description'];
+            }
+            if (isset($validated['date'])) {
+                $maintenanceUpdate['updated_at'] = $validated['date'];
+            }
+
+            if (!empty($maintenanceUpdate)) {
+                Maintenance::where('id', $expense->maintenance_id)
+                    ->update($maintenanceUpdate);
+            }
         }
+
+        return response()->json(
+            $expense->load(['vehicle', 'maintenance', 'creator', 'updater'])
+        );
     }
-
-    $expense->update($validated);
-
-    // ✅ Update linked maintenance details (optional)
-    if ($expense->maintenance_id) {
-        $maintenanceUpdate = [];
-
-        // If the amount or description or date changed, sync it to maintenance
-        if (isset($validated['amount'])) {
-            $maintenanceUpdate['cost'] = $validated['amount'];
-        }
-
-        if (isset($validated['description'])) {
-            $maintenanceUpdate['description'] = $validated['description'];
-        }
-
-        if (isset($validated['date'])) {
-            $maintenanceUpdate['updated_at'] = $validated['date'];
-        }
-
-        if (!empty($maintenanceUpdate)) {
-            Maintenance::where('id', $expense->maintenance_id)
-                ->update($maintenanceUpdate);
-        }
-    }
-
-    return response()->json(
-        $expense->load(['vehicle', 'maintenance', 'creator', 'updater'])
-    );
-}
-
 
     // ✅ Delete an expense
     public function destroy($id)

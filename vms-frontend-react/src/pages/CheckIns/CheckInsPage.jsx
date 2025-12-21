@@ -5,11 +5,13 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
+import LoadingError from '../../components/common/LoadingError';
 
 const CheckInsPage = () => {
   const { hasRole } = useAuth();
   const [checkIns, setCheckIns] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [meta, setMeta] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [checkoutModal, setCheckoutModal] = useState({ show: false, checkInId: null, vehicleInfo: '' });
@@ -24,6 +26,7 @@ const CheckInsPage = () => {
 
   const fetchCheckIns = async (page = 1) => {
     setLoading(true);
+    setError(null);
     try {
       const response = await api.get('/checkins', {
         params: { 
@@ -35,8 +38,9 @@ const CheckInsPage = () => {
       setCheckIns(response.data.data);
       setMeta(response.data.meta || response.data);
     } catch (error) {
+      console.error('Failed to fetch check-ins:', error);
+      setError(error);
       toast.error('Failed to load check-ins');
-      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -93,9 +97,12 @@ const CheckInsPage = () => {
       
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Vehicle Check-Ins</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Vehicle Check-Ins</h1>
+          <p className="text-gray-600 mt-1">Track vehicle entry and exit records</p>
+        </div>
         <Link to="/checkins/new" className="btn-primary">
-          New Check-In
+          Check In/Out Vehicle
         </Link>
       </div>
 
@@ -117,15 +124,26 @@ const CheckInsPage = () => {
         </div>
       </div>
 
+      {/* Error State */}
+      {error && !loading && (
+        <LoadingError
+          title="Failed to Load Check-Ins"
+          message="We couldn't load the check-in records. Please try again."
+          retry={() => fetchCheckIns()}
+        />
+      )}
+
       {/* Loading State */}
-      {loading ? (
+      {loading && !error && (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="text-gray-600 mt-4">Loading check-ins...</p>
         </div>
-      ) : (
+      )}
+
+      {/* Table - Only when not loading and no error */}
+      {!loading && !error && (
         <>
-          {/* Table */}
           <div className="bg-white shadow-md rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">

@@ -2,12 +2,18 @@ import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './contexts/AuthContext';
 import AppRoutes from './routes/AppRoutes';
+import ErrorBoundary from './components/common/ErrorBoundary';
+import NetworkStatus from './components/common/NetworkStatus';
+import RealtimeNotifications from './components/realtime/RealtimeNotifications';
 import './index.css';
 
 function App() {
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <AuthProvider>
+        <NetworkStatus />
+        <RealtimeNotifications />
         <AppRoutes />
         <Toaster
           position="top-right"
@@ -35,6 +41,7 @@ function App() {
         />
       </AuthProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

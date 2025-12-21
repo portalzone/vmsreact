@@ -13,7 +13,8 @@ class IncomeController extends Controller
     {
         $this->authorizeAccess('view');
 
-        $query = Income::with(['vehicle', 'driver', 'trip'])->latest();
+        // ✅ FIX: Add nested eager loading for driver.user
+        $query = Income::with(['vehicle', 'driver.user', 'trip'])->latest();
 
         if ($request->has('search')) {
             $search = $request->search;
@@ -21,7 +22,12 @@ class IncomeController extends Controller
                   ->orWhere('description', 'like', "%$search%");
         }
 
-        return response()->json($query->paginate(10));
+        // ✅ FIX: Add vehicle_id filter support
+        if ($request->has('vehicle_id') && $request->vehicle_id) {
+            $query->where('vehicle_id', $request->vehicle_id);
+        }
+
+        return response()->json($query->paginate($request->get('per_page', 15)));
     }
 
     // Store new income
@@ -41,14 +47,17 @@ class IncomeController extends Controller
 
         $income = Income::create($validated);
 
-        return response()->json($income->load(['vehicle', 'driver', 'trip']), 201);
+        // ✅ FIX: Add nested eager loading
+        return response()->json($income->load(['vehicle', 'driver.user', 'trip']), 201);
     }
 
     // Show income
     public function show(Income $income)
     {
         $this->authorizeAccess('view');
-        return response()->json($income->load(['vehicle', 'driver', 'trip']));
+        
+        // ✅ FIX: Add nested eager loading
+        return response()->json($income->load(['vehicle', 'driver.user', 'trip']));
     }
 
     // Update income
@@ -68,7 +77,8 @@ class IncomeController extends Controller
 
         $income->update($validated);
 
-        return response()->json($income->load(['vehicle', 'driver', 'trip']));
+        // ✅ FIX: Add nested eager loading
+        return response()->json($income->load(['vehicle', 'driver.user', 'trip']));
     }
 
     // Delete income
@@ -85,7 +95,7 @@ class IncomeController extends Controller
         $user = auth()->user();
 
         $map = [
-            'view'   => ['admin', 'manager'],
+            'view'   => ['admin', 'manager', 'driver', 'vehicle_owner'],
             'create' => ['admin', 'manager'],
             'update' => ['admin', 'manager'],
             'delete' => ['admin'],

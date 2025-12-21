@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\CheckInOut;
 use App\Models\Driver;
 use Illuminate\Http\Request;
+use App\Events\VehicleCheckedIn;   // ✅ Added
+use App\Events\VehicleCheckedOut;  // ✅ Added
 
 class CheckInOutController extends Controller
 {
@@ -34,26 +36,28 @@ class CheckInOutController extends Controller
 
         return response()->json($query->paginate($perPage));
     }
-public function latest(Request $request)
-{
-    $vehicleId = $request->query('vehicle_id');
 
-    if (!$vehicleId) {
-        return response()->json(['message' => 'Vehicle ID is required'], 400);
+    // ✅ Get latest check-in for a specific vehicle
+    public function latest(Request $request)
+    {
+        $vehicleId = $request->query('vehicle_id');
+
+        if (!$vehicleId) {
+            return response()->json(['message' => 'Vehicle ID is required'], 400);
+        }
+
+        $checkIn = CheckInOut::where('vehicle_id', $vehicleId)
+            ->latest()
+            ->first();
+
+        if (!$checkIn) {
+            return response()->json(['message' => 'No check-in found'], 404);
+        }
+
+        return response()->json($checkIn);
     }
 
-    $checkIn = CheckInOut::where('vehicle_id', $vehicleId)
-        ->latest()
-        ->first();
-
-    if (!$checkIn) {
-        return response()->json(['message' => 'No check-in found'], 404);
-    }
-
-    return response()->json($checkIn);
-}
-
-    // ✅ Create a new check-in record
+    // ✅ Create a new check-in record (Check In Vehicle)
     public function store(Request $request)
     {
         $this->authorizeAccess('create');
@@ -83,6 +87,9 @@ public function latest(Request $request)
 
         $checkIn = CheckInOut::create($validated);
 
+        // 📡 Broadcast real-time event
+        broadcast(new VehicleCheckedIn($checkIn))->toOthers();
+
         return response()->json([
             'message' => 'Check-in successful.',
             'data' => $checkIn->load([
@@ -91,10 +98,10 @@ public function latest(Request $request)
                 'checkedInByUser',
                 'checkedOutByUser',
             ]),
-        ]);
+        ], 201);
     }
 
-    // ✅ Custom check-out method
+    // ✅ Custom check-out method (Check Out Vehicle)
     public function checkout($id)
     {
         $this->authorizeAccess('update');
@@ -104,6 +111,9 @@ public function latest(Request $request)
         $checkIn->checked_out_at = now();
         $checkIn->checked_out_by = auth()->id();
         $checkIn->save();
+
+        // 📡 Broadcast real-time event
+        broadcast(new VehicleCheckedOut($checkIn))->toOthers();
 
         return response()->json([
             'message' => 'Check-out successful.',
@@ -131,7 +141,7 @@ public function latest(Request $request)
         return response()->json($record);
     }
 
-    // ✅ Update a record (admin only)
+    // ✅ Update a record (Admin/Manager manual edit)
     public function update(Request $request, $id)
     {
         $this->authorizeAccess('update');
@@ -146,6 +156,11 @@ public function latest(Request $request)
         $validated['checked_out_by'] = auth()->id();
 
         $record->update($validated);
+
+        // Optional: Broadcast here if admin manually "checks out" via update
+        if ($record->wasChanged('checked_out_at') && $record->checked_out_at) {
+             broadcast(new VehicleCheckedOut($record))->toOthers();
+        }
 
         return response()->json([
             'message' => 'Check-in/out record updated.',
