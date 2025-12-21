@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import ImageUpload from '../../components/common/ImageUpload';
+import ImageGallery from '../../components/common/ImageGallery';
 
 const VehicleDetailPage = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [vehicle, setVehicle] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     fetchVehicle();
@@ -22,6 +25,51 @@ const VehicleDetailPage = () => {
       navigate('/vehicles');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePhotoUpload = async (file) => {
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await api.post(`/vehicles/${id}/photos`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setVehicle(response.data.vehicle);
+      toast.success('Photo uploaded successfully!');
+    } catch (error) {
+      console.error('Photo upload error:', error);
+      toast.error(error.response?.data?.message || 'Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handlePhotoDelete = async (photo) => {
+    try {
+      const response = await api.delete(`/vehicles/${id}/photos`, {
+        data: { photo }
+      });
+
+      setVehicle(response.data.vehicle);
+      toast.success('Photo deleted successfully!');
+    } catch (error) {
+      console.error('Photo delete error:', error);
+      toast.error('Failed to delete photo');
+    }
+  };
+
+  const handleSetPrimary = async (photo) => {
+    try {
+      const response = await api.put(`/vehicles/${id}/photos/primary`, { photo });
+      setVehicle(response.data.vehicle);
+      toast.success('Primary photo updated!');
+    } catch (error) {
+      console.error('Set primary error:', error);
+      toast.error('Failed to set primary photo');
     }
   };
 
@@ -65,6 +113,13 @@ const VehicleDetailPage = () => {
       : 'bg-purple-100 text-purple-800';
   };
 
+  // Get photo URLs
+  const photoUrls = vehicle.photos?.map(photo => 
+    photo.startsWith('http') ? photo : `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/storage/${photo}`
+  ) || [];
+
+  const baseUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/storage/`;
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
@@ -94,7 +149,35 @@ const VehicleDetailPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Main Information Card */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Vehicle Photos Section */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-bold mb-4 border-b pb-2">Vehicle Photos</h2>
+            
+            {/* Photo Gallery */}
+            <div className="mb-6">
+              <ImageGallery
+                images={vehicle.photos || []}
+                onDelete={handlePhotoDelete}
+                onSetPrimary={handleSetPrimary}
+                primaryImage={vehicle.primary_photo}
+                baseUrl={baseUrl}
+              />
+            </div>
+
+            {/* Upload Section */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Add New Photo</h3>
+              <ImageUpload
+                onUpload={handlePhotoUpload}
+                label="Upload Vehicle Photo"
+                maxSize={5}
+              />
+            </div>
+          </div>
+
+          {/* Basic Information */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold mb-4 border-b pb-2">Basic Information</h2>
             
@@ -192,7 +275,7 @@ const VehicleDetailPage = () => {
                   {vehicle.purchase_price && (
                     <div>
                       <label className="text-sm font-medium text-gray-600">Purchase Price</label>
-                      <p className="text-lg font-semibold">${parseFloat(vehicle.purchase_price).toLocaleString()}</p>
+                      <p className="text-lg font-semibold">₦{parseFloat(vehicle.purchase_price).toLocaleString()}</p>
                     </div>
                   )}
 

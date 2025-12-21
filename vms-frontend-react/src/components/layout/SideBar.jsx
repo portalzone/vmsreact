@@ -1,135 +1,188 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
-const SideBar = () => {
-  const { user, logout, hasAnyRole } = useAuth();
+const Sidebar = () => {
+  const location = useLocation();
   const navigate = useNavigate();
+  const { hasRole, logout, user } = useAuth();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const isActive = (path) => location.pathname === path;
 
   const handleLogout = async () => {
     try {
       await logout();
       toast.success('Logged out successfully');
-      navigate('/');
+      navigate('/login');
     } catch (error) {
-      console.error('Logout error:', error);
       toast.error('Logout failed');
     }
   };
 
-  // Define menu items with role-based visibility
-  const menuItems = [
-    {
-      name: 'Dashboard',
-      path: '/dashboard',
-      roles: ['admin', 'manager', 'driver', 'vehicle_owner', 'gate_security'],
-    },
-    {
-      name: 'Vehicles',
-      path: '/vehicles',
-      roles: ['admin', 'manager', 'vehicle_owner', 'gate_security'],
-    },
-    {
-      name: 'Drivers',
-      path: '/drivers',
-      roles: ['admin', 'manager', 'vehicle_owner', 'gate_security'],
-    },
-    {
-      name: 'Check-Ins',
-      path: '/checkins',
-      roles: ['admin', 'manager', 'gate_security'],
-    },
-    {
-      name: 'Maintenance',
-      path: '/maintenance',
-      roles: ['admin', 'manager', 'vehicle_owner', 'driver'],
-    },
-    {
-      name: 'Expenses',
-      path: '/expenses',
-      roles: ['admin', 'manager', 'vehicle_owner', 'driver'],
-    },
-    {
-      name: 'Income',
-      path: '/incomes',
-      roles: ['admin', 'manager'],
-    },
-    {
-      name: 'Trips',
-      path: '/trips',
-      roles: ['admin', 'manager', 'vehicle_owner', 'driver', 'gate_security'],
-    },
-    {
-      name: 'Users',
-      path: '/users',
-      roles: ['admin', 'manager', 'gate_security'],
-    },
-    {
-      name: 'Audit Trail',
-      path: '/audit-trail',
-      roles: ['admin', 'manager'],
-    },
-    {
-      name: 'Recent Activity',
-      path: '/recent-activity',
-      roles: ['admin', 'manager'],
-    },
+  // ✅ Get avatar URL
+  const avatarUrl = user?.avatar_url || (user?.avatar ? 
+    `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/storage/${user.avatar}` : 
+    null
+  );
+
+  const navItems = [
+    { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'driver', 'gate_security', 'vehicle_owner'] },
+    { path: '/vehicles', label: 'Vehicles', icon: '🚗', roles: ['admin', 'manager', 'vehicle_owner', 'gate_security'] },
+    { path: '/drivers', label: 'Drivers', icon: '👨‍✈️', roles: ['admin', 'manager', 'gate_security'] },
+    { path: '/users', label: 'Users', icon: '👥', roles: ['admin', 'manager', 'gate_security'] },
+    { path: '/checkins', label: 'Check-Ins', icon: '🚪', roles: ['admin', 'manager', 'gate_security'] },
+    { path: '/trips', label: 'Trips', icon: '🗺️', roles: ['admin', 'manager', 'driver', 'vehicle_owner'] },
+    { path: '/maintenance', label: 'Maintenance', icon: '🔧', roles: ['admin', 'manager', 'vehicle_owner', 'driver'] },
+    { path: '/expenses', label: 'Expenses', icon: '💸', roles: ['admin', 'manager', 'vehicle_owner', 'driver'] },
+    { path: '/incomes', label: 'Income', icon: '💰', roles: ['admin', 'manager'] },
+    { path: '/analytics', label: 'Analytics', icon: '📊', roles: ['admin', 'manager'] },
+  { path: '/reports', label: 'Reports', icon: '📄', roles: ['admin', 'manager'] },
+    { path: '/audit-trail', label: 'Audit Trail', icon: '📋', roles: ['admin', 'manager'] },
+    { path: '/notifications', label: 'Notifications', icon: '🔔', roles: ['admin', 'manager', 'vehicle_owner'] },
   ];
 
-  // Filter menu items based on user roles
-  const visibleMenuItems = menuItems.filter((item) =>
-    hasAnyRole(item.roles)
+  const visibleItems = navItems.filter(item => 
+    item.roles.some(role => hasRole(role))
+  );
+
+  const NavLink = ({ item }) => (
+    <Link
+      to={item.path}
+      onClick={() => setIsMobileMenuOpen(false)}
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+        isActive(item.path)
+          ? 'bg-blue-600 text-white'
+          : 'text-gray-700 hover:bg-gray-100'
+      }`}
+    >
+      <span className="text-xl">{item.icon}</span>
+      <span className="font-medium">{item.label}</span>
+    </Link>
   );
 
   return (
-    <aside className="w-64 bg-white shadow-md flex flex-col">
-      {/* Header */}
-      <div className="p-6 text-lg font-bold text-gray-800 border-b">
-        VMS Dashboard
-      </div>
+    <>
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-lg"
+      >
+        <svg
+          className="w-6 h-6"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          {isMobileMenuOpen ? (
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
+          ) : (
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          )}
+        </svg>
+      </button>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2 text-sm overflow-y-auto">
-        {visibleMenuItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) =>
-              `block px-3 py-2 rounded-md transition-colors ${
-                isActive
-                  ? 'bg-gray-200 text-gray-900 font-semibold'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`
-            }
+      {/* Overlay for mobile */}
+      {isMobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`
+          fixed lg:sticky top-0 left-0 h-screen
+          w-64 bg-white shadow-lg
+          transform transition-transform duration-300 ease-in-out
+          z-40 overflow-y-auto flex flex-col
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+      >
+        {/* Logo & User Info */}
+        <div className="p-6 border-b border-gray-200">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            VMS
+          </h1>
+          
+          {/* User Info */}
+          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+            {/* ✅ Avatar with Image Support */}
+            <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={user?.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-white font-bold text-lg">
+                  {user?.name?.charAt(0)?.toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">
+                {user?.name}
+              </p>
+              <p className="text-xs text-gray-500 truncate capitalize">
+                {user?.roles?.[0]?.name}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-2">
+          {visibleItems.map((item) => (
+            <NavLink key={item.path} item={item} />
+          ))}
+        </nav>
+
+        {/* Bottom Actions */}
+        <div className="p-4 border-t border-gray-200 space-y-2">
+          {/* Profile Button */}
+          <Link
+            to="/profile"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+              isActive('/profile')
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
           >
-            {item.name}
-          </NavLink>
-        ))}
-      </nav>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span className="font-medium">Profile</span>
+          </Link>
 
-      {/* User Info & Logout */}
-      <div className="p-4 border-t space-y-2">
-        <NavLink
-          to="/profile"
-          className={({ isActive }) =>
-            `block px-3 py-2 rounded-md transition-colors ${
-              isActive
-                ? 'bg-gray-200 text-gray-900 font-semibold'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`
-          }
-        >
-          My Profile
-        </NavLink>
-        <button
-          onClick={handleLogout}
-          className="w-full text-left px-3 py-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-        >
-          Logout
-        </button>
-      </div>
-    </aside>
+          {/* Logout Button */}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span className="font-medium">Logout</span>
+          </button>
+        </div>
+      </aside>
+    </>
   );
 };
 
-export default SideBar;
+export default Sidebar;

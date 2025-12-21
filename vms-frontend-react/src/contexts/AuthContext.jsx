@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import api from '../services/api'; // ✅ Changed from 'axios' to 'api'
+import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext(null);
@@ -13,7 +13,7 @@ export const AuthProvider = ({ children }) => {
   // Set axios authorization header when token changes
   useEffect(() => {
     if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`; // ✅ Changed
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       fetchUser();
     } else {
       setLoading(false);
@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const response = await api.get('/me'); // ✅ Changed
+      const response = await api.get('/me');
       setUser(response.data.user || response.data);
     } catch (error) {
       console.error('Failed to fetch user:', error);
@@ -62,17 +62,24 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await api.post('/logout'); // ✅ Changed
+      await api.post('/logout');
     } catch (error) {
       console.warn('Logout request failed or was already invalid');
     }
 
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    delete api.defaults.headers.common['Authorization']; // ✅ Changed
+    delete api.defaults.headers.common['Authorization'];
     setToken(null);
     setUser(null);
     navigate('/login');
+  };
+
+  // ✅ ADD THIS: Update user function for avatar/profile updates
+  const updateUser = (userData) => {
+    setUser(userData);
+    // Also update localStorage to keep it in sync
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   // Helper functions for role checking
@@ -99,6 +106,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    setUser: updateUser, // ✅ Export setUser function
     token,
     loading,
     login,

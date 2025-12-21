@@ -16,29 +16,48 @@ use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
-    public function stats()
-    {
-        $today = Carbon::today();
+public function stats()
+{
+    $today = Carbon::today();
+    $thisMonth = Carbon::now()->startOfMonth();
 
-        return response()->json([
-            'vehicles' => Vehicle::count(),
-            'drivers' => Driver::count(),
-            'expenses' => Expense::sum('amount'),
-            'incomes' => Income::sum('amount'),
-            'trips' => Trip::count(),
-            'maintenances' => [
-                'pending'     => Maintenance::where('status', 'pending')->count(),
-                'in_progress' => Maintenance::where('status', 'in_progress')->count(),
-                'completed'   => Maintenance::where('status', 'completed')->count(),
-            ],
-            'vehicles_inside' => CheckInOut::whereNull('checked_out_at')->count(),
-            'check_ins_today' => CheckInOut::whereDate('checked_in_at', $today)->count(),
-            'check_outs_today' => CheckInOut::whereDate('checked_out_at', $today)->count(),
-            'active_trips' => Trip::whereNull('end_time')->count(),
-            'total_check_ins' => CheckInOut::count(),
-        ]);
-    }
-
+    return response()->json([
+        // Basic counts
+        'vehicles' => Vehicle::count(),
+        'drivers' => Driver::count(),
+        'users' => \App\Models\User::count(),
+        'trips' => Trip::count(),
+        
+        // Financial data
+        'totalIncome' => Income::sum('amount'),
+        'totalExpenses' => Expense::sum('amount'),
+        'monthlyIncome' => Income::where('date', '>=', $thisMonth)->sum('amount'),
+        'monthlyExpenses' => Expense::where('date', '>=', $thisMonth)->sum('amount'),
+        
+        // Maintenance counts
+        'pendingMaintenance' => Maintenance::where('status', 'Pending')->count(),
+        'inProgressMaintenance' => Maintenance::where('status', 'in_progress')->count(),
+        'completedMaintenance' => Maintenance::where('status', 'Completed')->count(),
+        'maintenance' => Maintenance::where('status', 'Pending')->count(), // Alias for compatibility
+        
+        // Trip stats
+        'activeTrips' => Trip::where('status', 'in_progress')->count(),
+        'completedTrips' => Trip::where('status', 'completed')->count(),
+        'pendingTrips' => Trip::where('status', 'pending')->count(),
+        
+        // Check-in stats (FIXED COLUMN NAMES)
+        'vehiclesInPremises' => CheckInOut::whereNull('checked_out_at')->count(),
+        'todayCheckIns' => CheckInOut::whereDate('checked_in_at', $today)->count(),
+        'todayCheckOuts' => CheckInOut::whereDate('checked_out_at', $today)->count(),
+        'totalCheckIns' => CheckInOut::count(),
+        'pendingCheckOuts' => CheckInOut::whereNull('checked_out_at')->count(),
+        
+        // Legacy names for backward compatibility
+        'vehicles_inside' => CheckInOut::whereNull('checked_out_at')->count(),
+        'check_ins_today' => CheckInOut::whereDate('checked_in_at', $today)->count(),
+        'check_outs_today' => CheckInOut::whereDate('checked_out_at', $today)->count(),
+    ]);
+}
     public function recentActivity(Request $request)
     {
         $perPage = $request->input('per_page', 10);

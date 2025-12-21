@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import ImageUpload from '../../components/common/ImageUpload';
+import ImageGallery from '../../components/common/ImageGallery';
 
 const VehicleFormPage = () => {
   const navigate = useNavigate();
@@ -16,7 +18,6 @@ const VehicleFormPage = () => {
     ownership_type: 'organization',
     individual_type: '',
     owner_id: '',
-    // New fields
     color: '',
     vin: '',
     status: 'active',
@@ -31,44 +32,54 @@ const VehicleFormPage = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  
+  // ✅ Photo upload state
+  const [pendingPhotos, setPendingPhotos] = useState([]); // For CREATE mode
+  const [existingPhotos, setExistingPhotos] = useState([]); // For EDIT mode
+  const [primaryPhoto, setPrimaryPhoto] = useState(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     if (isEdit) {
       fetchVehicle();
     }
-    fetchUsers(); // For owner selection
+    fetchUsers();
   }, [id]);
 
-  const fetchVehicle = async () => {
-    try {
-      const response = await api.get(`/vehicles/${id}`);
-      const vehicle = response.data;
-      
-      // ✅ FIXED: Populate ALL fields including new ones
-      setFormData({
-        plate_number: vehicle.plate_number || '',
-        manufacturer: vehicle.manufacturer || '',
-        model: vehicle.model || '',
-        year: vehicle.year || '',
-        ownership_type: vehicle.ownership_type || 'organization',
-        individual_type: vehicle.individual_type || '',
-        owner_id: vehicle.owner_id || '',
-        // New fields
-        color: vehicle.color || '',
-        vin: vehicle.vin || '',
-        status: vehicle.status || 'active',
-        fuel_type: vehicle.fuel_type || '',
-        seating_capacity: vehicle.seating_capacity || '',
-        mileage: vehicle.mileage || '',
-        purchase_date: vehicle.purchase_date || '',
-        purchase_price: vehicle.purchase_price || '',
-        notes: vehicle.notes || ''
-      });
-    } catch (error) {
-      toast.error('Failed to load vehicle');
-      navigate('/vehicles');
-    }
-  };
+const fetchVehicle = async () => {
+  try {
+    const response = await api.get(`/vehicles/${id}`);
+    const vehicle = response.data;
+    
+    setFormData({
+      plate_number: vehicle.plate_number || '',
+      manufacturer: vehicle.manufacturer || '',
+      model: vehicle.model || '',
+      year: vehicle.year || '',
+      ownership_type: vehicle.ownership_type || 'organization',
+      individual_type: vehicle.individual_type || '',
+      owner_id: vehicle.owner_id || '',
+      // New fields
+      color: vehicle.color || '',
+      vin: vehicle.vin || '',
+      status: vehicle.status || 'active',
+      fuel_type: vehicle.fuel_type || '',
+      seating_capacity: vehicle.seating_capacity || '',
+      mileage: vehicle.mileage || '',
+      // ✅ FIX: Extract only the date portion (yyyy-MM-dd)
+      purchase_date: vehicle.purchase_date ? vehicle.purchase_date.split('T')[0] : '',
+      purchase_price: vehicle.purchase_price || '',
+      notes: vehicle.notes || ''
+    });
+
+    // ✅ Set existing photos
+    setExistingPhotos(vehicle.photos || []);
+    setPrimaryPhoto(vehicle.primary_photo);
+  } catch (error) {
+    toast.error('Failed to load vehicle');
+    navigate('/vehicles');
+  }
+};
 
   const fetchUsers = async () => {
     try {
@@ -82,7 +93,6 @@ const VehicleFormPage = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     
-    // Clear dependent fields when ownership_type changes
     if (name === 'ownership_type') {
       setFormData(prev => ({
         ...prev,
@@ -91,7 +101,6 @@ const VehicleFormPage = () => {
         owner_id: ''
       }));
     }
-    // Clear owner_id when individual_type changes and it's not vehicle_owner
     else if (name === 'individual_type') {
       setFormData(prev => ({
         ...prev,
@@ -106,9 +115,98 @@ const VehicleFormPage = () => {
       }));
     }
     
-    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  // ✅ Handle photo selection (CREATE mode)
+  const handlePhotoSelect = (file) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPendingPhotos(prev => [...prev, {
+        file,
+        preview: reader.result
+      }]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // ✅ Remove pending photo (CREATE mode)
+  const handleRemovePendingPhoto = (index) => {
+    setPendingPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // ✅ Upload photo (EDIT mode)
+  const handlePhotoUpload = async (file) => {
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await api.post(`/vehicles/${id}/photos`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setExistingPhotos(response.data.vehicle.photos || []);
+      setPrimaryPhoto(response.data.vehicle.primary_photo);
+      toast.success('Photo uploaded successfully!');
+    } catch (error) {
+      console.error('Photo upload error:', error);
+      toast.error('Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  // ✅ Delete photo (EDIT mode)
+  const handlePhotoDelete = async (photo) => {
+    try {
+      const response = await api.delete(`/vehicles/${id}/photos`, {
+        data: { photo }
+      });
+
+      setExistingPhotos(response.data.vehicle.photos || []);
+      setPrimaryPhoto(response.data.vehicle.primary_photo);
+      toast.success('Photo deleted successfully!');
+    } catch (error) {
+      console.error('Photo delete error:', error);
+      toast.error('Failed to delete photo');
+    }
+  };
+
+  // ✅ Set primary photo (EDIT mode)
+  const handleSetPrimary = async (photo) => {
+    try {
+      const response = await api.put(`/vehicles/${id}/photos/primary`, { photo });
+      setPrimaryPhoto(response.data.vehicle.primary_photo);
+      toast.success('Primary photo updated!');
+    } catch (error) {
+      console.error('Set primary error:', error);
+      toast.error('Failed to set primary photo');
+    }
+  };
+
+  // ✅ Upload pending photos after vehicle creation
+  const uploadPendingPhotos = async (vehicleId) => {
+    if (pendingPhotos.length === 0) return;
+
+    toast.loading('Uploading photos...');
+    
+    try {
+      for (const photo of pendingPhotos) {
+        const formData = new FormData();
+        formData.append('image', photo.file);
+        await api.post(`/vehicles/${vehicleId}/photos`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+      toast.dismiss();
+      toast.success('Photos uploaded successfully!');
+    } catch (error) {
+      toast.dismiss();
+      console.error('Failed to upload photos:', error);
+      toast.error('Some photos failed to upload');
     }
   };
 
@@ -118,14 +216,21 @@ const VehicleFormPage = () => {
     setErrors({});
 
     try {
+      let vehicleId = id;
+      
       if (isEdit) {
         await api.put(`/vehicles/${id}`, formData);
         toast.success('Vehicle updated successfully');
       } else {
-        await api.post('/vehicles', formData);
+        const response = await api.post('/vehicles', formData);
+        vehicleId = response.data.vehicle.id;
         toast.success('Vehicle created successfully');
+        
+        // ✅ Upload pending photos
+        await uploadPendingPhotos(vehicleId);
       }
-      navigate('/vehicles');
+      
+      navigate(`/vehicles/${vehicleId}`);
     } catch (error) {
       if (error.response?.data?.errors) {
         setErrors(error.response.data.errors);
@@ -140,6 +245,8 @@ const VehicleFormPage = () => {
     }
   };
 
+  const baseUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/storage/`;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">
@@ -149,6 +256,73 @@ const VehicleFormPage = () => {
       <div className="bg-white rounded-lg shadow-md p-6 max-w-4xl">
         <form onSubmit={handleSubmit}>
           
+          {/* ✅ PHOTO UPLOAD SECTION */}
+          <div className="mb-8 pb-8 border-b border-gray-200">
+            <h2 className="text-xl font-bold mb-4">Vehicle Photos</h2>
+            
+            {isEdit ? (
+              // EDIT MODE: Show existing photos and allow uploading
+              <div className="space-y-4">
+                {existingPhotos.length > 0 && (
+                  <div className="mb-4">
+                    <ImageGallery
+                      images={existingPhotos}
+                      onDelete={handlePhotoDelete}
+                      onSetPrimary={handleSetPrimary}
+                      primaryImage={primaryPhoto}
+                      baseUrl={baseUrl}
+                    />
+                  </div>
+                )}
+                
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">Add New Photo</h3>
+                  <ImageUpload
+                    onUpload={handlePhotoUpload}
+                    label="Upload Vehicle Photo"
+                    maxSize={5}
+                  />
+                </div>
+              </div>
+            ) : (
+              // CREATE MODE: Allow selecting photos to upload after creation
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Select photos to upload with your vehicle. They will be uploaded after the vehicle is created.
+                </p>
+                
+                {pendingPhotos.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    {pendingPhotos.map((photo, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={photo.preview}
+                          alt={`Preview ${index + 1}`}
+                          className="w-full h-32 object-cover rounded-lg border-2 border-gray-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePendingPhoto(index)}
+                          className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <ImageUpload
+                  onUpload={handlePhotoSelect}
+                  label={pendingPhotos.length > 0 ? "Add More Photos" : "Select Vehicle Photos"}
+                  maxSize={5}
+                />
+              </div>
+            )}
+          </div>
+
           {/* Plate Number */}
           <div className="mb-6">
             <label className="form-label">
@@ -283,7 +457,7 @@ const VehicleFormPage = () => {
 
           </div>
 
-          {/* Conditional: Individual Type (only show if ownership is individual) */}
+          {/* Conditional: Individual Type */}
           {formData.ownership_type === 'individual' && (
             <>
               <div className="mb-6">
@@ -305,12 +479,8 @@ const VehicleFormPage = () => {
                 {errors.individual_type && (
                   <p className="text-red-600 text-sm mt-1">{errors.individual_type[0]}</p>
                 )}
-                <p className="text-sm text-gray-600 mt-1">
-                  Select who this vehicle belongs to
-                </p>
               </div>
 
-              {/* Conditional: Owner Selection (only show if individual_type is vehicle_owner) */}
               {formData.individual_type === 'vehicle_owner' && (
                 <div className="mb-6">
                   <label className="form-label">
@@ -352,9 +522,6 @@ const VehicleFormPage = () => {
               <option value="inactive">Inactive</option>
               <option value="sold">Sold</option>
             </select>
-            {errors.status && (
-              <p className="text-red-600 text-sm mt-1">{errors.status[0]}</p>
-            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -376,9 +543,6 @@ const VehicleFormPage = () => {
                 <option value="cng">CNG</option>
                 <option value="lpg">LPG</option>
               </select>
-              {errors.fuel_type && (
-                <p className="text-red-600 text-sm mt-1">{errors.fuel_type[0]}</p>
-              )}
             </div>
 
             {/* Seating Capacity */}
@@ -393,9 +557,6 @@ const VehicleFormPage = () => {
                 min="1"
                 max="100"
               />
-              {errors.seating_capacity && (
-                <p className="text-red-600 text-sm mt-1">{errors.seating_capacity[0]}</p>
-              )}
             </div>
 
             {/* Mileage */}
@@ -410,9 +571,6 @@ const VehicleFormPage = () => {
                 min="0"
                 step="0.01"
               />
-              {errors.mileage && (
-                <p className="text-red-600 text-sm mt-1">{errors.mileage[0]}</p>
-              )}
             </div>
 
             {/* Purchase Date */}
@@ -425,9 +583,6 @@ const VehicleFormPage = () => {
                 onChange={handleChange}
                 className="form-input"
               />
-              {errors.purchase_date && (
-                <p className="text-red-600 text-sm mt-1">{errors.purchase_date[0]}</p>
-              )}
             </div>
 
             {/* Purchase Price */}
@@ -443,9 +598,6 @@ const VehicleFormPage = () => {
                 step="0.01"
                 placeholder="0.00"
               />
-              {errors.purchase_price && (
-                <p className="text-red-600 text-sm mt-1">{errors.purchase_price[0]}</p>
-              )}
             </div>
           </div>
 
@@ -460,20 +612,6 @@ const VehicleFormPage = () => {
               rows="4"
               placeholder="Any additional information about this vehicle..."
             />
-            {errors.notes && (
-              <p className="text-red-600 text-sm mt-1">{errors.notes[0]}</p>
-            )}
-          </div>
-
-          {/* Help Text */}
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded">
-            <h3 className="font-semibold text-blue-900 mb-2">Ownership Types:</h3>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li><strong>Organization:</strong> Company-owned vehicles</li>
-              <li><strong>Individual - Staff:</strong> Employee's personal vehicle</li>
-              <li><strong>Individual - Visitor:</strong> Visitor's vehicle (temporary)</li>
-              <li><strong>Individual - Vehicle Owner:</strong> Registered owner in the system</li>
-            </ul>
           </div>
 
           {/* Buttons */}

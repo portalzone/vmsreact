@@ -5,11 +5,24 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
+import ExportButton from '../../components/common/ExportButton';
+import LoadingError from '../../components/common/LoadingError';
+
+const formatUsersForExport = (users) => {
+  return users.map(user => ({
+    'Name': user.name,
+    'Email': user.email,
+    'Role': user.roles?.[0]?.name || 'N/A',
+    'Status': user.status || 'Active',
+    'Created': new Date(user.created_at).toLocaleDateString()
+  }));
+};
 
 const UsersPage = () => {
   const { user: currentUser, hasRole } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [meta, setMeta] = useState(null);
   const [roleFilter, setRoleFilter] = useState('');
   const [deleteModal, setDeleteModal] = useState({ show: false, userId: null });
@@ -25,6 +38,7 @@ const UsersPage = () => {
 
   const fetchUsers = async (page = 1) => {
     setLoading(true);
+    setError(null);
     try {
       const response = await api.get('/users', {
         params: { 
@@ -36,8 +50,9 @@ const UsersPage = () => {
       setUsers(response.data.data);
       setMeta(response.data.meta || response.data);
     } catch (error) {
+      console.error('Failed to fetch users:', error);
+      setError(error);
       toast.error('Failed to load users');
-      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -111,7 +126,11 @@ const UsersPage = () => {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <p className="text-red-800 font-medium">You don't have permission to view users.</p>
+          <svg className="w-16 h-16 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <h2 className="text-xl font-bold text-red-800 mb-2">Access Denied</h2>
+          <p className="text-red-600">You don't have permission to view users.</p>
         </div>
       </div>
     );
@@ -122,12 +141,23 @@ const UsersPage = () => {
       
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Users Management</h1>
-        {canCreateUsers && (
-          <Link to="/users/new" className="btn-primary">
-            Add New User
-          </Link>
-        )}
+        <div>
+          <h1 className="text-3xl font-bold">Users</h1>
+          <p className="text-gray-600 mt-1">Manage system users and permissions</p>
+        </div>
+        <div className="flex gap-3">
+          <ExportButton
+            data={users}
+            filename="users"
+            sheetName="Users"
+            formatData={formatUsersForExport}
+          />
+          {canCreateUsers && (
+            <Link to="/users/new" className="btn-primary">
+              Add New User
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -172,15 +202,26 @@ const UsersPage = () => {
         </div>
       </div>
 
+      {/* Error State */}
+      {error && !loading && (
+        <LoadingError
+          title="Failed to Load Users"
+          message="We couldn't load the users list. Please try again."
+          retry={() => fetchUsers()}
+        />
+      )}
+
       {/* Loading State */}
-      {loading ? (
+      {loading && !error && (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="text-gray-600 mt-4">Loading users...</p>
         </div>
-      ) : (
+      )}
+
+      {/* Table - Only when not loading and no error */}
+      {!loading && !error && (
         <>
-          {/* Table */}
           <div className="bg-white shadow-md rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
