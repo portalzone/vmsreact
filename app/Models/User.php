@@ -34,6 +34,7 @@ class User extends Authenticatable
         'phone',
         'login_count',
         'last_login_at',
+        'notification_preferences', // ✅ Added
     ];
 
     protected $with = ['roles'];
@@ -57,6 +58,7 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
         'last_login_at' => 'datetime',
+        'notification_preferences' => 'array', // ✅ Added
     ];
 
     /**
@@ -76,6 +78,24 @@ class User extends Authenticatable
     public function sendPasswordResetNotification($token)
     {
         $this->notify(new ResetPasswordNotification($token));
+    }
+
+    /**
+     * Check if user should receive a specific notification type
+     * 
+     * @param string $type
+     * @return bool
+     */
+    public function shouldReceiveNotification(string $type): bool
+    {
+        $preferences = $this->notification_preferences ?? [
+            'maintenance_reminders' => true,
+            'expense_alerts' => true,
+            'trip_completions' => true,
+            'weekly_summary' => true,
+        ];
+        
+        return $preferences[$type] ?? true;
     }
 
     /**

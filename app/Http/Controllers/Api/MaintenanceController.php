@@ -5,34 +5,47 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Maintenance;
 use App\Models\Expense;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Events\MaintenanceStatusUpdated; // ✅ Added
+use Illuminate\Support\Facades\Notification;
+use App\Events\MaintenanceStatusUpdated;
+use App\Notifications\MaintenanceReminderNotification;
+use Carbon\Carbon;
 
 class MaintenanceController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $this->authorizeAccess('view');
+        
+        $query = Maintenance::with(['vehicle', 'expense', 'createdBy', 'updatedBy']);
+        
+        // Apply filters
+        $query->filter($request->all());
+        
         $user = auth()->user();
 
-        if ($user->hasRole('admin') || $user->hasRole('manager')) {
-            return Maintenance::with(['vehicle', 'expense', 'createdBy', 'updatedBy'])->latest()->get();
-        }
-
+        // Role-based filtering
         if ($user->hasRole('vehicle_owner')) {
-            return Maintenance::whereHas('vehicle', function ($q) use ($user) {
+            $query->whereHas('vehicle', function ($q) use ($user) {
                 $q->where('owner_id', $user->id);
-            })->with(['vehicle', 'expense', 'createdBy', 'updatedBy'])->latest()->get();
-        }
-
-        if ($user->hasRole('driver')) {
-            return Maintenance::whereHas('vehicle.drivers', function ($q) use ($user) {
+            });
+        } elseif ($user->hasRole('driver')) {
+            $query->whereHas('vehicle.driver', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
-            })->with(['vehicle', 'expense', 'createdBy', 'updatedBy'])->latest()->get();
+            });
         }
 
-        return response()->json(['message' => 'Forbidden'], 403);
+        // Sorting
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortOrder = $request->get('sort_order', 'desc');
+        $query->orderBy($sortBy, $sortOrder);
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        
+        return response()->json($query->paginate($perPage));
     }
 
     public function store(Request $request)
@@ -70,16 +83,37 @@ class MaintenanceController extends Controller
 
         $maintenance = Maintenance::create($maintenanceData);
 
+        // Create expense if completed
         if ($maintenance->status === 'Completed') {
             Expense::create([
                 'vehicle_id'     => $maintenance->vehicle_id,
                 'maintenance_id' => $maintenance->id,
                 'amount'         => $maintenance->cost ?? 0,
                 'description'    => 'Maintenance: ' . $maintenance->description,
+                'category'       => 'maintenance',
                 'date'           => $maintenance->date,
                 'created_by'     => $userId,
                 'updated_by'     => $userId,
             ]);
+        }
+
+        // ✅ Send notification if scheduled within next 3 days
+        if ($maintenance->status === 'Pending' && 
+            Carbon::parse($maintenance->date)->between(Carbon::now(), Carbon::now()->addDays(3))) {
+            
+            $notifiables = User::role(['admin', 'manager'])->get();
+            
+            // Add vehicle owner if exists
+            if ($maintenance->vehicle && $maintenance->vehicle->owner) {
+                $notifiables->push($maintenance->vehicle->owner);
+            }
+            
+            // Filter by preferences and send
+            foreach ($notifiables as $user) {
+                if ($user->shouldReceiveNotification('maintenance_reminders')) {
+                    $user->notify(new MaintenanceReminderNotification($maintenance));
+                }
+            }
         }
 
         return response()->json($maintenance->load(['vehicle', 'expense', 'createdBy', 'updatedBy']), 201);
@@ -92,13 +126,12 @@ class MaintenanceController extends Controller
         return response()->json($record);
     }
 
-    // ✅ Update method with Broadcast Integration
     public function update(Request $request, $id)
     {
         $this->authorizeAccess('update');
 
         $maintenance = Maintenance::findOrFail($id);
-        $oldStatus = $maintenance->status; // Capture old status for comparison
+        $oldStatus = $maintenance->status;
 
         $validated = $request->validate([
             'vehicle_id'  => 'sometimes|exists:vehicles,id',
@@ -117,12 +150,13 @@ class MaintenanceController extends Controller
             'updated_by' => auth()->id(),
         ]);
 
-        // 1. Handle Expense Update
+        // Handle Expense Update
         if (($validated['status'] ?? $maintenance->status) === 'Completed') {
             $expenseData = [
                 'vehicle_id'     => $maintenance->vehicle_id,
                 'amount'         => $maintenance->cost ?? 0,
                 'description'    => 'Maintenance: ' . $maintenance->description,
+                'category'       => 'maintenance',
                 'date'           => $maintenance->date,
                 'updated_by'     => auth()->id(),
             ];
@@ -136,7 +170,7 @@ class MaintenanceController extends Controller
             }
         }
 
-        // 2. 📡 Broadcast Event if Status Changed
+        // ✅ Broadcast Event if Status Changed
         if ($oldStatus !== $maintenance->status) {
             broadcast(new MaintenanceStatusUpdated($maintenance))->toOthers();
         }
@@ -173,7 +207,6 @@ class MaintenanceController extends Controller
             $file = $request->file('file');
             $path = $maintenance->uploadImage($file, 'maintenance-attachments');
             
-            // Get current attachments
             $attachments = $maintenance->attachments ?? [];
             $attachments[] = [
                 'name' => $file->getClientOriginalName(),
@@ -182,7 +215,6 @@ class MaintenanceController extends Controller
                 'size' => $file->getSize(),
             ];
             
-            // Update maintenance
             $maintenance->update([
                 'attachments' => $attachments,
                 'updated_by' => Auth::id(),
@@ -221,14 +253,11 @@ class MaintenanceController extends Controller
         try {
             $pathToDelete = $request->path;
             
-            // Delete from storage
             $maintenance->deleteImage($pathToDelete);
             
-            // Remove from attachments array
             $attachments = $maintenance->attachments ?? [];
             $attachments = array_filter($attachments, fn($att) => $att['path'] !== $pathToDelete);
             
-            // Update maintenance
             $maintenance->update([
                 'attachments' => array_values($attachments),
                 'updated_by' => Auth::id(),
@@ -253,7 +282,6 @@ class MaintenanceController extends Controller
 
         $maintenance = Maintenance::findOrFail($id);
         
-        // Delete all attachments before deleting maintenance
         if ($maintenance->attachments) {
             foreach ($maintenance->attachments as $attachment) {
                 $maintenance->deleteImage($attachment['path'] ?? null);
