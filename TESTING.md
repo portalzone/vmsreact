@@ -85,13 +85,13 @@ Comprehensive testing guide for the Vehicle Management System covering manual te
 - Purpose: Development and initial testing
 
 **2. Staging**
-- URL: https://staging.vms.basepan.com
+- URL: https://staging.myvms.basepan.com
 - Database: vms_staging
 - Debug: Disabled
 - Purpose: Pre-production testing
 
 **3. Production**
-- URL: https://vms.basepan.com
+- URL: https://myvms.basepan.com
 - Database: vms_production
 - Debug: Disabled
 - Purpose: Live environment (limited testing)
@@ -596,14 +596,14 @@ sudo apt install apache2-utils
 **Basic Load Test:**
 ```bash
 # 1000 requests, 10 concurrent
-ab -n 1000 -c 10 https://vms.basepan.com/
+ab -n 1000 -c 10 https://myvms.basepan.com/
 ```
 
 **With Authentication:**
 ```bash
 ab -n 1000 -c 10 \
   -H "Authorization: Bearer YOUR_TOKEN" \
-  https://api.vms.basepan.com/api/vehicles
+  https://api.myvms.basepan.com/api/vehicles
 ```
 
 **Expected Results:**
@@ -621,7 +621,7 @@ npm install -g artillery
 **Test Configuration (load-test.yml):**
 ```yaml
 config:
-  target: 'https://api.vms.basepan.com'
+  target: 'https://api.myvms.basepan.com'
   phases:
     - duration: 60
       arrivalRate: 10
@@ -820,7 +820,7 @@ php artisan telescope:install  # Install Laravel Telescope
 
 **Environment:** Production / Staging / Development
 
-**URL:** https://vms.basepan.com/page
+**URL:** https://myvms.basepan.com/page
 
 **Steps to Reproduce:**
 1. Step one

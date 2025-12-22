@@ -324,7 +324,7 @@ $role->givePermissionTo($permission);
 APP_NAME="VMS"
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://vms.basepan.com
+APP_URL=https://myvms.basepan.com
 
 # Timezone
 APP_TIMEZONE=Africa/Lagos
@@ -707,10 +707,10 @@ aws s3 sync /backups/vms/ s3://your-bucket/vms-backups/
 **Check Application Status:**
 ```bash
 # Test web server
-curl -I https://vms.basepan.com
+curl -I https://myvms.basepan.com
 
 # Test API
-curl https://api.vms.basepan.com/api/health
+curl https://api.myvms.basepan.com/api/health
 ```
 
 **Check Services:**
@@ -1021,7 +1021,7 @@ composer require --dev knuckleswtf/scribe
 php artisan scribe:generate
 ```
 
-**Access:** `https://api.vms.basepan.com/docs`
+**Access:** `https://api.myvms.basepan.com/docs`
 
 ---
 

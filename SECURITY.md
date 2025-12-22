@@ -415,7 +415,7 @@ return [
     'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     
     'allowed_origins' => [
-        'https://vms.basepan.com',
+        'https://myvms.basepan.com',
     ],
     
     'allowed_origins_patterns' => [],
@@ -539,7 +539,7 @@ public function boot()
 ```nginx
 server {
     listen 80;
-    server_name vms.basepan.com;
+    server_name myvms.basepan.com;
     return 301 https://$server_name$request_uri;
 }
 ```
