@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import api from '../../services/api';
 import toast from 'react-hot-toast';
 
 const Sidebar = () => {
@@ -8,8 +9,28 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const { hasRole, logout, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const isActive = (path) => location.pathname === path;
+
+  // ✅ Fetch unread notification count
+  useEffect(() => {
+    fetchUnreadCount();
+    
+    // Poll every 30 seconds for new notifications
+    const interval = setInterval(fetchUnreadCount, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await api.get('/notifications/unread-count');
+      setUnreadCount(response.data.count || 0);
+    } catch (error) {
+      console.error('Failed to fetch unread count:', error);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -21,7 +42,7 @@ const Sidebar = () => {
     }
   };
 
-  // ✅ Get avatar URL
+  // Get avatar URL
   const avatarUrl = user?.avatar_url || (user?.avatar ? 
     `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/storage/${user.avatar}` : 
     null
@@ -37,10 +58,10 @@ const Sidebar = () => {
     { path: '/maintenance', label: 'Maintenance', icon: '🔧', roles: ['admin', 'manager', 'vehicle_owner', 'driver'] },
     { path: '/expenses', label: 'Expenses', icon: '💸', roles: ['admin', 'manager', 'vehicle_owner', 'driver'] },
     { path: '/incomes', label: 'Income', icon: '💰', roles: ['admin', 'manager'] },
-    { path: '/analytics', label: 'Analytics', icon: '📊', roles: ['admin', 'manager'] },
-  { path: '/reports', label: 'Reports', icon: '📄', roles: ['admin', 'manager'] },
+    { path: '/analytics', label: 'Analytics', icon: '📈', roles: ['admin', 'manager'] },
+    { path: '/reports', label: 'Reports', icon: '📄', roles: ['admin', 'manager'] },
     { path: '/audit-trail', label: 'Audit Trail', icon: '📋', roles: ['admin', 'manager'] },
-    { path: '/notifications', label: 'Notifications', icon: '🔔', roles: ['admin', 'manager', 'vehicle_owner'] },
+    { path: '/notifications', label: 'Notifications', icon: '🔔', roles: ['admin', 'manager', 'vehicle_owner', 'driver'], badge: true },
   ];
 
   const visibleItems = navItems.filter(item => 
@@ -51,14 +72,25 @@ const Sidebar = () => {
     <Link
       to={item.path}
       onClick={() => setIsMobileMenuOpen(false)}
-      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative ${
         isActive(item.path)
           ? 'bg-blue-600 text-white'
           : 'text-gray-700 hover:bg-gray-100'
       }`}
     >
       <span className="text-xl">{item.icon}</span>
-      <span className="font-medium">{item.label}</span>
+      <span className="font-medium flex-1">{item.label}</span>
+      
+      {/* ✅ Notification Badge */}
+      {item.badge && unreadCount > 0 && (
+        <span className={`inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none rounded-full ${
+          isActive(item.path) 
+            ? 'bg-white text-blue-600' 
+            : 'bg-red-500 text-white'
+        }`}>
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
     </Link>
   );
 
@@ -119,19 +151,25 @@ const Sidebar = () => {
           
           {/* User Info */}
           <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-            {/* ✅ Avatar with Image Support */}
+            {/* Avatar with Image Support */}
             <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
               {avatarUrl ? (
                 <img
                   src={avatarUrl}
                   alt={user?.name}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
                 />
-              ) : (
-                <span className="text-white font-bold text-lg">
-                  {user?.name?.charAt(0)?.toUpperCase()}
-                </span>
-              )}
+              ) : null}
+              <span 
+                className="text-white font-bold text-lg"
+                style={{ display: avatarUrl ? 'none' : 'flex' }}
+              >
+                {user?.name?.charAt(0)?.toUpperCase()}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900 truncate">
