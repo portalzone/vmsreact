@@ -414,9 +414,9 @@ Special thanks to:
 
 ## 🔗 Links
 
-- **Website:** https://vms.basepan.com
+- **Website:** https://myvms.basepan.com
 - **Documentation:** https://docs.basepan.com
-- **API Docs:** https://vms.basepan.com/docs
+- **API Docs:** https://myvms.basepan.com/docs
 - **GitHub:** https://github.com/yourorg/vms
 - **NPM Package:** Coming soon
 

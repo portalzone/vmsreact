@@ -509,10 +509,10 @@ See [LICENSE](LICENSE) file for details.
 
 ## Links
 
-- **Website:** https://vms.basepan.com
+- **Website:** https://myvms.basepan.com
 - **Documentation:** https://docs.basepan.com
 - **GitHub:** https://github.com/yourorg/vms
-- **API Docs:** https://api.vms.basepan.com/docs
+- **API Docs:** https://api.myvms.basepan.com/docs
 
 ---
 

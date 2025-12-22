@@ -3,7 +3,7 @@
 ## Overview
 
 **Base URL:** `http://localhost:8000/api` (Development)  
-**Base URL:** `https://vms.basepan.com` (Production)
+**Base URL:** `https://myvms.basepan.com` (Production)
 
 **Version:** 1.0  
 **Last Updated:** December 21, 2024

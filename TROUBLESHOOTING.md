@@ -803,7 +803,7 @@ sudo certbot renew --dry-run
 
 **1. Update APP_URL:**
 ```env
-APP_URL=https://vms.basepan.com
+APP_URL=https://myvms.basepan.com
 ```
 
 **2. Force HTTPS:**

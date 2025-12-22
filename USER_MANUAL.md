@@ -55,7 +55,7 @@ This manual will guide you through all features of the VMS platform.
 ### Accessing VMS
 
 1. Open your web browser
-2. Navigate to: `https://vms.basepan.com`
+2. Navigate to: `https://myvms.basepan.com`
 3. You'll see the login page
 
 ### First Time Login
@@ -1023,7 +1023,7 @@ VMS is mobile-responsive and works on smartphones and tablets.
 ### Mobile Browser Access
 
 1. Open browser on mobile device
-2. Go to: `https://vms.basepan.com`
+2. Go to: `https://myvms.basepan.com`
 3. Login with credentials
 4. Interface adapts to screen size
 

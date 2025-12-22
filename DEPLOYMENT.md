@@ -53,7 +53,7 @@ This guide covers deploying the Vehicle Management System (VMS) to production en
 
 ### Domain Requirements
 
-- Domain name configured (e.g., vms.basepan.com)
+- Domain name configured (e.g., myvms.basepan.com)
 - DNS records pointing to server IP
 - SSL certificate (Let's Encrypt recommended)
 
@@ -218,7 +218,7 @@ APP_NAME="VMS"
 APP_ENV=production
 APP_KEY=
 APP_DEBUG=false
-APP_URL=https://vms.basepan.com
+APP_URL=https://myvms.basepan.com
 
 # Database
 DB_CONNECTION=mysql
@@ -265,7 +265,7 @@ LOG_CHANNEL=stack
 LOG_LEVEL=error
 
 # Security
-SANCTUM_STATEFUL_DOMAINS=vms.basepan.com
+SANCTUM_STATEFUL_DOMAINS=myvms.basepan.com
 SESSION_DOMAIN=.basepan.com
 ```
 
@@ -343,12 +343,12 @@ nano .env
 
 **Production .env:**
 ```env
-VITE_API_URL=https://vms.basepan.com
+VITE_API_URL=https://myvms.basepan.com
 VITE_APP_NAME=VMS
 
 # Reverb (WebSocket)
 VITE_REVERB_APP_KEY=your_app_key
-VITE_REVERB_HOST=reverb.vms.basepan.com
+VITE_REVERB_HOST=reverb.myvms.basepan.com
 VITE_REVERB_PORT=443
 VITE_REVERB_SCHEME=https
 ```
@@ -389,7 +389,7 @@ sudo cp -r dist/* /var/www/vms-frontend/public/
 server {
     listen 80;
     listen [::]:80;
-    server_name api.vms.basepan.com;
+    server_name api.myvms.basepan.com;
     
     return 301 https://$server_name$request_uri;
 }
@@ -398,14 +398,14 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name api.vms.basepan.com;
+    server_name api.myvms.basepan.com;
     
     root /var/www/vms/public;
     index index.php;
     
     # SSL Certificates
-    ssl_certificate /etc/letsencrypt/live/api.vms.basepan.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.vms.basepan.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/api.myvms.basepan.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.myvms.basepan.com/privkey.pem;
     
     # SSL Configuration
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -479,23 +479,23 @@ server {
 server {
     listen 80;
     listen [::]:80;
-    server_name vms.basepan.com www.vms.basepan.com;
+    server_name myvms.basepan.com www.myvms.basepan.com;
     
-    return 301 https://vms.basepan.com$request_uri;
+    return 301 https://myvms.basepan.com$request_uri;
 }
 
 # HTTPS
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name vms.basepan.com www.vms.basepan.com;
+    server_name myvms.basepan.com www.myvms.basepan.com;
     
     root /var/www/vms-frontend/dist;
     index index.html;
     
     # SSL Certificates
-    ssl_certificate /etc/letsencrypt/live/vms.basepan.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/vms.basepan.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/myvms.basepan.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/myvms.basepan.com/privkey.pem;
     
     # SSL Configuration
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -559,8 +559,8 @@ sudo systemctl reload nginx
 sudo apt install -y certbot python3-certbot-nginx
 
 # Obtain certificates for both domains
-sudo certbot --nginx -d api.vms.basepan.com
-sudo certbot --nginx -d vms.basepan.com -d www.vms.basepan.com
+sudo certbot --nginx -d api.myvms.basepan.com
+sudo certbot --nginx -d myvms.basepan.com -d www.myvms.basepan.com
 
 # Certbot will automatically:
 # - Obtain certificates
@@ -975,7 +975,7 @@ php artisan view:cache
 ### Backend Health Check
 ```bash
 # Test API endpoint
-curl -I https://api.vms.basepan.com/api/health
+curl -I https://api.myvms.basepan.com/api/health
 
 # Expected: HTTP/2 200
 ```
@@ -998,7 +998,7 @@ Route::get('/health', function () {
 
 ### Frontend Health Check
 ```bash
-curl -I https://vms.basepan.com
+curl -I https://myvms.basepan.com
 
 # Expected: HTTP/2 200
 ```
@@ -1008,8 +1008,8 @@ curl -I https://vms.basepan.com
 **Using Uptime Robot (free):**
 1. Sign up at uptimerobot.com
 2. Add monitors for:
-   - https://vms.basepan.com
-   - https://api.vms.basepan.com/api/health
+   - https://myvms.basepan.com
+   - https://api.myvms.basepan.com/api/health
 3. Set alert email
 
 ---
@@ -1109,7 +1109,7 @@ sudo systemctl restart php8.1-fpm
 **Check:**
 ```bash
 # Test SSL
-openssl s_client -connect vms.basepan.com:443
+openssl s_client -connect myvms.basepan.com:443
 
 # Check certificate expiry
 sudo certbot certificates

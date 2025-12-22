@@ -483,7 +483,7 @@ Contact:
 For licensing inquiries:
 Email: contact@basepan.com
 Phone: +1 (709) 771-8379
-Website: https://vms.basepan.com
+Website: https://myvms.basepan.com
 
 For commercial licensing:
 Email: contact@basepan.com
