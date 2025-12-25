@@ -33,11 +33,14 @@ const VehicleFormPage = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   
-  // ✅ Photo upload state
+  // Photo upload state
   const [pendingPhotos, setPendingPhotos] = useState([]); // For CREATE mode
   const [existingPhotos, setExistingPhotos] = useState([]); // For EDIT mode
   const [primaryPhoto, setPrimaryPhoto] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // ✅ FIX: Use ASSET URL for images, not API URL (Prevents /api/storage/ error)
+  const baseUrl = `${import.meta.env.VITE_ASSET_URL || 'http://localhost:8000'}/storage/`;
 
   useEffect(() => {
     if (isEdit) {
@@ -46,44 +49,43 @@ const VehicleFormPage = () => {
     fetchUsers();
   }, [id]);
 
-const fetchVehicle = async () => {
-  try {
-    const response = await api.get(`/vehicles/${id}`);
-    const vehicle = response.data;
-    
-    setFormData({
-      plate_number: vehicle.plate_number || '',
-      manufacturer: vehicle.manufacturer || '',
-      model: vehicle.model || '',
-      year: vehicle.year || '',
-      ownership_type: vehicle.ownership_type || 'organization',
-      individual_type: vehicle.individual_type || '',
-      owner_id: vehicle.owner_id || '',
-      // New fields
-      color: vehicle.color || '',
-      vin: vehicle.vin || '',
-      status: vehicle.status || 'active',
-      fuel_type: vehicle.fuel_type || '',
-      seating_capacity: vehicle.seating_capacity || '',
-      mileage: vehicle.mileage || '',
-      // ✅ FIX: Extract only the date portion (yyyy-MM-dd)
-      purchase_date: vehicle.purchase_date ? vehicle.purchase_date.split('T')[0] : '',
-      purchase_price: vehicle.purchase_price || '',
-      notes: vehicle.notes || ''
-    });
+  const fetchVehicle = async () => {
+    try {
+      const response = await api.get(`/vehicles/${id}`);
+      const vehicle = response.data;
+      
+      setFormData({
+        plate_number: vehicle.plate_number || '',
+        manufacturer: vehicle.manufacturer || '',
+        model: vehicle.model || '',
+        year: vehicle.year || '',
+        ownership_type: vehicle.ownership_type || 'organization',
+        individual_type: vehicle.individual_type || '',
+        owner_id: vehicle.owner_id || '',
+        color: vehicle.color || '',
+        vin: vehicle.vin || '',
+        status: vehicle.status || 'active',
+        fuel_type: vehicle.fuel_type || '',
+        seating_capacity: vehicle.seating_capacity || '',
+        mileage: vehicle.mileage || '',
+        // ✅ Date Fix: Extract YYYY-MM-DD for input[type="date"]
+        purchase_date: vehicle.purchase_date ? vehicle.purchase_date.split('T')[0] : '',
+        purchase_price: vehicle.purchase_price || '',
+        notes: vehicle.notes || ''
+      });
 
-    // ✅ Set existing photos
-    setExistingPhotos(vehicle.photos || []);
-    setPrimaryPhoto(vehicle.primary_photo);
-  } catch (error) {
-    toast.error('Failed to load vehicle');
-    navigate('/vehicles');
-  }
-};
+      setExistingPhotos(vehicle.photos || []);
+      setPrimaryPhoto(vehicle.primary_photo);
+    } catch (error) {
+      toast.error('Failed to load vehicle');
+      navigate('/vehicles');
+    }
+  };
 
   const fetchUsers = async () => {
     try {
       const response = await api.get('/users');
+      // Handle both paginated and non-paginated responses
       setUsers(response.data.data || response.data);
     } catch (error) {
       console.error('Failed to load users:', error);
@@ -93,6 +95,7 @@ const fetchVehicle = async () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     
+    // Logic to clear dependent fields
     if (name === 'ownership_type') {
       setFormData(prev => ({
         ...prev,
@@ -120,7 +123,9 @@ const fetchVehicle = async () => {
     }
   };
 
-  // ✅ Handle photo selection (CREATE mode)
+  // --- Photo Handling Logic ---
+
+  // 1. Create Mode: Select photos for later upload
   const handlePhotoSelect = (file) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -132,12 +137,11 @@ const fetchVehicle = async () => {
     reader.readAsDataURL(file);
   };
 
-  // ✅ Remove pending photo (CREATE mode)
   const handleRemovePendingPhoto = (index) => {
     setPendingPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  // ✅ Upload photo (EDIT mode)
+  // 2. Edit Mode: Upload immediately
   const handlePhotoUpload = async (file) => {
     setUploadingPhoto(true);
     try {
@@ -159,8 +163,9 @@ const fetchVehicle = async () => {
     }
   };
 
-  // ✅ Delete photo (EDIT mode)
   const handlePhotoDelete = async (photo) => {
+    if (!confirm('Are you sure you want to delete this photo?')) return;
+    
     try {
       const response = await api.delete(`/vehicles/${id}/photos`, {
         data: { photo }
@@ -175,7 +180,6 @@ const fetchVehicle = async () => {
     }
   };
 
-  // ✅ Set primary photo (EDIT mode)
   const handleSetPrimary = async (photo) => {
     try {
       const response = await api.put(`/vehicles/${id}/photos/primary`, { photo });
@@ -187,7 +191,7 @@ const fetchVehicle = async () => {
     }
   };
 
-  // ✅ Upload pending photos after vehicle creation
+  // 3. Post-Creation: Upload pending photos
   const uploadPendingPhotos = async (vehicleId) => {
     if (pendingPhotos.length === 0) return;
 
@@ -197,16 +201,21 @@ const fetchVehicle = async () => {
       for (const photo of pendingPhotos) {
         const formData = new FormData();
         formData.append('image', photo.file);
-        await api.post(`/vehicles/${vehicleId}/photos`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        // Ensure we catch individual errors so one bad photo doesn't stop the loop
+        try {
+          await api.post(`/vehicles/${vehicleId}/photos`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        } catch (err) {
+          console.error("Single photo upload failed", err);
+        }
       }
       toast.dismiss();
-      toast.success('Photos uploaded successfully!');
+      toast.success('Photos processed');
     } catch (error) {
       toast.dismiss();
       console.error('Failed to upload photos:', error);
-      toast.error('Some photos failed to upload');
+      toast.error('Error during photo upload');
     }
   };
 
@@ -226,7 +235,7 @@ const fetchVehicle = async () => {
         vehicleId = response.data.vehicle.id;
         toast.success('Vehicle created successfully');
         
-        // ✅ Upload pending photos
+        // Wait for photos to upload before navigating
         await uploadPendingPhotos(vehicleId);
       }
       
@@ -245,8 +254,6 @@ const fetchVehicle = async () => {
     }
   };
 
-  const baseUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/storage/`;
-
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">
@@ -256,12 +263,12 @@ const fetchVehicle = async () => {
       <div className="bg-white rounded-lg shadow-md p-6 max-w-4xl">
         <form onSubmit={handleSubmit}>
           
-          {/* ✅ PHOTO UPLOAD SECTION */}
+          {/* PHOTO UPLOAD SECTION */}
           <div className="mb-8 pb-8 border-b border-gray-200">
             <h2 className="text-xl font-bold mb-4">Vehicle Photos</h2>
             
             {isEdit ? (
-              // EDIT MODE: Show existing photos and allow uploading
+              // EDIT MODE
               <div className="space-y-4">
                 {existingPhotos.length > 0 && (
                   <div className="mb-4">
@@ -279,16 +286,17 @@ const fetchVehicle = async () => {
                   <h3 className="text-sm font-medium text-gray-700 mb-2">Add New Photo</h3>
                   <ImageUpload
                     onUpload={handlePhotoUpload}
-                    label="Upload Vehicle Photo"
+                    label={uploadingPhoto ? "Uploading..." : "Upload Vehicle Photo"}
                     maxSize={5}
+                    disabled={uploadingPhoto}
                   />
                 </div>
               </div>
             ) : (
-              // CREATE MODE: Allow selecting photos to upload after creation
+              // CREATE MODE
               <div className="space-y-4">
                 <p className="text-sm text-gray-600">
-                  Select photos to upload with your vehicle. They will be uploaded after the vehicle is created.
+                  Select photos to upload with your vehicle. They will be uploaded automatically after the vehicle is created.
                 </p>
                 
                 {pendingPhotos.length > 0 && (
@@ -343,7 +351,6 @@ const fetchVehicle = async () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            
             {/* Manufacturer */}
             <div>
               <label className="form-label">
@@ -355,7 +362,7 @@ const fetchVehicle = async () => {
                 value={formData.manufacturer}
                 onChange={handleChange}
                 className="form-input"
-                placeholder="e.g., Toyota, Honda, Ford"
+                placeholder="e.g., Toyota"
                 required
               />
               {errors.manufacturer && (
@@ -374,7 +381,7 @@ const fetchVehicle = async () => {
                 value={formData.model}
                 onChange={handleChange}
                 className="form-input"
-                placeholder="e.g., Camry, Civic, F-150"
+                placeholder="e.g., Camry"
                 required
               />
               {errors.model && (
@@ -394,7 +401,7 @@ const fetchVehicle = async () => {
                 onChange={handleChange}
                 className="form-input"
                 min="1900"
-                max={new Date().getFullYear()}
+                max={new Date().getFullYear() + 1}
                 required
               />
               {errors.year && (
@@ -411,11 +418,8 @@ const fetchVehicle = async () => {
                 value={formData.color}
                 onChange={handleChange}
                 className="form-input"
-                placeholder="e.g., Black, White, Blue"
+                placeholder="e.g., Black"
               />
-              {errors.color && (
-                <p className="text-red-600 text-sm mt-1">{errors.color[0]}</p>
-              )}
             </div>
 
             {/* VIN */}
@@ -430,9 +434,6 @@ const fetchVehicle = async () => {
                 maxLength="17"
                 placeholder="17-character VIN"
               />
-              {errors.vin && (
-                <p className="text-red-600 text-sm mt-1">{errors.vin[0]}</p>
-              )}
             </div>
 
             {/* Ownership Type */}
@@ -450,11 +451,7 @@ const fetchVehicle = async () => {
                 <option value="organization">Organization</option>
                 <option value="individual">Individual</option>
               </select>
-              {errors.ownership_type && (
-                <p className="text-red-600 text-sm mt-1">{errors.ownership_type[0]}</p>
-              )}
             </div>
-
           </div>
 
           {/* Conditional: Individual Type */}
@@ -476,9 +473,6 @@ const fetchVehicle = async () => {
                   <option value="visitor">Visitor</option>
                   <option value="vehicle_owner">Vehicle Owner</option>
                 </select>
-                {errors.individual_type && (
-                  <p className="text-red-600 text-sm mt-1">{errors.individual_type[0]}</p>
-                )}
               </div>
 
               {formData.individual_type === 'vehicle_owner' && (
@@ -500,33 +494,28 @@ const fetchVehicle = async () => {
                       </option>
                     ))}
                   </select>
-                  {errors.owner_id && (
-                    <p className="text-red-600 text-sm mt-1">{errors.owner_id[0]}</p>
-                  )}
                 </div>
               )}
             </>
           )}
 
-          {/* Status */}
-          <div className="mb-6">
-            <label className="form-label">Status</label>
-            <select
-              name="status"
-              value={formData.status}
-              onChange={handleChange}
-              className="form-input"
-            >
-              <option value="active">Active</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="inactive">Inactive</option>
-              <option value="sold">Sold</option>
-            </select>
-          </div>
-
+          {/* Additional Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            
-            {/* Fuel Type */}
+            <div>
+              <label className="form-label">Status</label>
+              <select
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                className="form-input"
+              >
+                <option value="active">Active</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="inactive">Inactive</option>
+                <option value="sold">Sold</option>
+              </select>
+            </div>
+
             <div>
               <label className="form-label">Fuel Type</label>
               <select
@@ -545,7 +534,6 @@ const fetchVehicle = async () => {
               </select>
             </div>
 
-            {/* Seating Capacity */}
             <div>
               <label className="form-label">Seating Capacity</label>
               <input
@@ -555,11 +543,9 @@ const fetchVehicle = async () => {
                 onChange={handleChange}
                 className="form-input"
                 min="1"
-                max="100"
               />
             </div>
 
-            {/* Mileage */}
             <div>
               <label className="form-label">Current Mileage (km)</label>
               <input
@@ -573,7 +559,6 @@ const fetchVehicle = async () => {
               />
             </div>
 
-            {/* Purchase Date */}
             <div>
               <label className="form-label">Purchase Date</label>
               <input
@@ -585,19 +570,21 @@ const fetchVehicle = async () => {
               />
             </div>
 
-            {/* Purchase Price */}
-            <div className="md:col-span-2">
+            <div>
               <label className="form-label">Purchase Price</label>
-              <input
-                type="number"
-                name="purchase_price"
-                value={formData.purchase_price}
-                onChange={handleChange}
-                className="form-input"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₦</span>
+                <input
+                  type="number"
+                  name="purchase_price"
+                  value={formData.purchase_price}
+                  onChange={handleChange}
+                  className="form-input pl-8"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                />
+              </div>
             </div>
           </div>
 
@@ -610,7 +597,7 @@ const fetchVehicle = async () => {
               onChange={handleChange}
               className="form-input"
               rows="4"
-              placeholder="Any additional information about this vehicle..."
+              placeholder="Any additional information..."
             />
           </div>
 

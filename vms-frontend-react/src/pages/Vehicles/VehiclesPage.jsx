@@ -34,7 +34,7 @@ const VehiclesPage = () => {
 
   useEffect(() => {
     fetchVehicles();
-  }, [pagination.current_page, quickSearch]);
+  }, [pagination.current_page, quickSearch]); // Note: Filters are applied via manual "Apply" button
 
   const fetchVehicles = async () => {
     try {
@@ -46,7 +46,7 @@ const VehiclesPage = () => {
         ...filters
       };
 
-      // Remove empty filters
+      // Clean empty params
       Object.keys(params).forEach(key => {
         if (params[key] === '' || params[key] === null || params[key] === undefined) {
           delete params[key];
@@ -94,7 +94,8 @@ const VehiclesPage = () => {
     });
     setQuickSearch('');
     setPagination(prev => ({ ...prev, current_page: 1 }));
-    setTimeout(() => fetchVehicles(), 100);
+    // Allow state update before fetch
+    setTimeout(() => fetchVehicles(), 0); 
     toast.success('Filters reset!');
   };
 
@@ -104,9 +105,11 @@ const VehiclesPage = () => {
     try {
       await api.delete(`/vehicles/${id}`);
       toast.success('Vehicle deleted successfully');
+      // Refresh list
       fetchVehicles();
     } catch (error) {
-      toast.error('Failed to delete vehicle');
+        console.error("Delete failed", error);
+        toast.error('Failed to delete vehicle. It may be linked to other records.');
     }
   };
 
@@ -120,19 +123,26 @@ const VehiclesPage = () => {
     return badges[status] || 'bg-gray-100 text-gray-800';
   };
 
+  // Helper for checking edit/create permissions
+  const canEdit = hasRole('admin') || hasRole('manager') || hasRole('vehicle_owner') || hasRole('gate_security');
+  const canDelete = hasRole('admin');
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Vehicles</h1>
           <p className="text-gray-600 mt-1">
-            {pagination.total} total vehicle{pagination.total !== 1 ? 's' : ''}
+            Manage your fleet and vehicle records
           </p>
         </div>
-        {(hasRole('admin') || hasRole('manager') || hasRole('gate_security')) && (
-          <Link to="/vehicles/new" className="btn-primary">
-            + Add Vehicle
+        {canEdit && (
+          <Link to="/vehicles/new" className="btn-primary flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Vehicle
           </Link>
         )}
       </div>
@@ -140,7 +150,10 @@ const VehiclesPage = () => {
       {/* Quick Search */}
       <div className="mb-4">
         <QuickSearchBar
-          onSearch={setQuickSearch}
+          onSearch={(val) => {
+              setQuickSearch(val);
+              setPagination(prev => ({ ...prev, current_page: 1 })); // Reset page on search
+          }}
           placeholder="Search by plate number, manufacturer, model, VIN..."
           defaultValue={quickSearch}
         />
@@ -254,10 +267,13 @@ const VehiclesPage = () => {
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900">No vehicles found</h3>
           <p className="mt-1 text-sm text-gray-500">Try adjusting your filters or search query</p>
+          <button onClick={handleResetFilters} className="mt-4 text-blue-600 hover:text-blue-800 font-medium">
+             Clear all filters
+          </button>
         </div>
       ) : (
         <>
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -283,14 +299,25 @@ const VehiclesPage = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {vehicles.map(vehicle => (
-                  <tr key={vehicle.id} className="hover:bg-gray-50">
+                  <tr key={vehicle.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900">
-                        {vehicle.manufacturer} {vehicle.model}
+                      <div className="flex items-center">
+                          {vehicle.primary_photo ? (
+                             <img src={`${import.meta.env.VITE_ASSET_URL || 'http://localhost:8000'}/storage/${vehicle.primary_photo}`} alt="" className="h-10 w-10 rounded-full object-cover mr-3" />
+                          ) : (
+                             <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center mr-3 text-gray-500">
+                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                             </div>
+                          )}
+                          <div>
+                              <div className="font-medium text-gray-900">
+                                {vehicle.manufacturer} {vehicle.model}
+                              </div>
+                              {vehicle.color && (
+                                <div className="text-sm text-gray-500">{vehicle.color}</div>
+                              )}
+                          </div>
                       </div>
-                      {vehicle.color && (
-                        <div className="text-sm text-gray-500">{vehicle.color}</div>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
                       {vehicle.plate_number}
@@ -300,36 +327,34 @@ const VehiclesPage = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(vehicle.status)}`}>
-                        {vehicle.status}
+                        {vehicle.status ? vehicle.status.charAt(0).toUpperCase() + vehicle.status.slice(1) : ''}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {vehicle.ownership_type === 'organization' ? 'Organization' : vehicle.individual_type || 'Individual'}
+                      {vehicle.ownership_type === 'organization' ? 'Organization' : (vehicle.individual_type ? vehicle.individual_type.replace('_', ' ') : 'Individual')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <Link
                         to={`/vehicles/${vehicle.id}`}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
+                        className="text-blue-600 hover:text-blue-900 mr-4 font-semibold"
                       >
                         View
                       </Link>
-                      {(hasRole('admin') || hasRole('manager') || hasRole('vehicle_owner')) && (
-                        <>
-                          <Link
-                            to={`/vehicles/${vehicle.id}/edit`}
-                            className="text-indigo-600 hover:text-indigo-900 mr-4"
-                          >
-                            Edit
-                          </Link>
-                          {hasRole('admin') && (
-                            <button
-                              onClick={() => handleDelete(vehicle.id)}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </>
+                      {canEdit && (
+                        <Link
+                          to={`/vehicles/${vehicle.id}/edit`}
+                          className="text-indigo-600 hover:text-indigo-900 mr-4 font-semibold"
+                        >
+                          Edit
+                        </Link>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(vehicle.id)}
+                          className="text-red-600 hover:text-red-900 font-semibold"
+                        >
+                          Delete
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -371,17 +396,36 @@ const VehiclesPage = () => {
                   <button
                     onClick={() => setPagination(prev => ({ ...prev, current_page: prev.current_page - 1 }))}
                     disabled={pagination.current_page === 1}
-                    className="btn-secondary disabled:opacity-50"
+                    className="btn-secondary px-3 py-1 disabled:opacity-50"
                   >
                     Previous
                   </button>
-                  <span className="px-4 py-2 border rounded-lg bg-gray-50">
-                    Page {pagination.current_page} of {pagination.last_page}
-                  </span>
+                  <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, pagination.last_page) }, (_, i) => {
+                          // Simple pagination logic to show limited page numbers
+                          let pageNum = i + 1;
+                          if (pagination.last_page > 5) {
+                              if (pagination.current_page > 3) {
+                                  pageNum = pagination.current_page - 2 + i;
+                              }
+                              if (pageNum > pagination.last_page) return null;
+                          }
+                          
+                          return (
+                            <button
+                                key={pageNum}
+                                onClick={() => setPagination(prev => ({ ...prev, current_page: pageNum }))}
+                                className={`px-3 py-1 rounded border ${pagination.current_page === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                            >
+                                {pageNum}
+                            </button>
+                          )
+                      })}
+                  </div>
                   <button
                     onClick={() => setPagination(prev => ({ ...prev, current_page: prev.current_page + 1 }))}
                     disabled={pagination.current_page === pagination.last_page}
-                    className="btn-secondary disabled:opacity-50"
+                    className="btn-secondary px-3 py-1 disabled:opacity-50"
                   >
                     Next
                   </button>

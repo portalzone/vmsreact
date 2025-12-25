@@ -193,45 +193,45 @@ const MaintenanceFormPage = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrors({});
+  e.preventDefault();
+  setLoading(true);
+  setErrors({});
 
-    try {
-      const submitData = {
-        ...formData,
-        cost: formData.cost || null
-      };
+  try {
+    const submitData = {
+      ...formData,
+      cost: formData.cost || null
+    };
 
-      let maintenanceId = id;
+    let maintenanceId = id;
 
-      if (isEdit) {
-        await api.put(`/maintenance/${id}`, submitData);
-        toast.success('Maintenance record updated successfully');
-      } else {
-        const response = await api.post('/maintenance', submitData);
-        maintenanceId = response.data.maintenance.id;
-        toast.success('Maintenance record created successfully');
-        
-        // ✅ Upload pending attachments
-        await uploadPendingAttachments(maintenanceId);
-      }
+    if (isEdit) {
+      const response = await api.put(`/maintenance/${id}`, submitData);
+      maintenanceId = response.data.id; // ✅ Fixed here too for consistency
+      toast.success('Maintenance record updated successfully');
+    } else {
+      const response = await api.post('/maintenance', submitData);
+      maintenanceId = response.data.id; // ✅ FIXED: Direct access
+      toast.success('Maintenance record created successfully');
       
-      navigate(`/maintenance/${maintenanceId}`);
-    } catch (error) {
-      if (error.response?.status === 403) {
-        toast.error(error.response.data.error || 'You are not authorized to perform this action');
-      } else if (error.response?.data?.errors) {
-        setErrors(error.response.data.errors);
-        toast.error('Please fix the form errors');
-      } else {
-        toast.error(error.response?.data?.message || 'Failed to save maintenance record');
-      }
-    } finally {
-      setLoading(false);
+      // ✅ Upload pending attachments
+      await uploadPendingAttachments(maintenanceId);
     }
-  };
-
+    
+    navigate(`/maintenance/${maintenanceId}`);
+  } catch (error) {
+    if (error.response?.status === 403) {
+      toast.error(error.response.data.error || 'You are not authorized to perform this action');
+    } else if (error.response?.data?.errors) {
+      setErrors(error.response.data.errors);
+      toast.error('Please fix the form errors');
+    } else {
+      toast.error(error.response?.data?.message || 'Failed to save maintenance record');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
   const getFileIcon = (type) => {
     if (type?.includes('pdf')) return '📄';
     if (type?.includes('image')) return '🖼️';

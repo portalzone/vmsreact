@@ -12,6 +12,10 @@ const VehicleDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  // ✅ FIX: Use the Asset URL for images (No /api prefix)
+  const assetUrl = import.meta.env.VITE_ASSET_URL || 'http://localhost:8000';
+  const baseUrl = `${assetUrl}/storage/`;
+
   useEffect(() => {
     fetchVehicle();
   }, [id]);
@@ -21,7 +25,7 @@ const VehicleDetailPage = () => {
       const response = await api.get(`/vehicles/${id}`);
       setVehicle(response.data);
     } catch (error) {
-      toast.error('Failed to load vehicle');
+      toast.error('Failed to load vehicle details');
       navigate('/vehicles');
     } finally {
       setLoading(false);
@@ -49,6 +53,8 @@ const VehicleDetailPage = () => {
   };
 
   const handlePhotoDelete = async (photo) => {
+    if (!window.confirm("Are you sure you want to delete this photo?")) return;
+
     try {
       const response = await api.delete(`/vehicles/${id}/photos`, {
         data: { photo }
@@ -113,21 +119,14 @@ const VehicleDetailPage = () => {
       : 'bg-purple-100 text-purple-800';
   };
 
-  // Get photo URLs
-  const photoUrls = vehicle.photos?.map(photo => 
-    photo.startsWith('http') ? photo : `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/storage/${photo}`
-  ) || [];
-
-  const baseUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/storage/`;
-
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
           <h1 className="text-3xl font-bold">Vehicle Details</h1>
           <p className="text-gray-600 mt-1">
-            {vehicle.manufacturer} {vehicle.model} - {vehicle.plate_number}
+            {vehicle.manufacturer} {vehicle.model} - <span className="font-mono font-semibold">{vehicle.plate_number}</span>
           </p>
         </div>
         <div className="flex gap-3">
@@ -171,8 +170,9 @@ const VehicleDetailPage = () => {
               <h3 className="text-sm font-medium text-gray-700 mb-3">Add New Photo</h3>
               <ImageUpload
                 onUpload={handlePhotoUpload}
-                label="Upload Vehicle Photo"
+                label={uploadingPhoto ? "Uploading..." : "Upload Vehicle Photo"}
                 maxSize={5}
+                disabled={uploadingPhoto}
               />
             </div>
           </div>
@@ -192,7 +192,7 @@ const VehicleDetailPage = () => {
                 <label className="text-sm font-medium text-gray-600">Status</label>
                 <div className="mt-1">
                   <span className={`px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${getStatusBadge(vehicle.status)}`}>
-                    {vehicle.status || 'active'}
+                    {vehicle.status ? vehicle.status.charAt(0).toUpperCase() + vehicle.status.slice(1) : 'Active'}
                   </span>
                 </div>
               </div>
@@ -222,7 +222,7 @@ const VehicleDetailPage = () => {
               {vehicle.vin && (
                 <div className="md:col-span-2">
                   <label className="text-sm font-medium text-gray-600">VIN</label>
-                  <p className="text-lg font-mono">{vehicle.vin}</p>
+                  <p className="text-lg font-mono tracking-wider">{vehicle.vin}</p>
                 </div>
               )}
 
@@ -287,7 +287,9 @@ const VehicleDetailPage = () => {
             {vehicle.notes && (
               <>
                 <h2 className="text-xl font-bold mt-6 mb-4 border-b pb-2">Notes</h2>
-                <p className="text-gray-700 whitespace-pre-wrap">{vehicle.notes}</p>
+                <div className="bg-gray-50 p-4 rounded-md">
+                    <p className="text-gray-700 whitespace-pre-wrap">{vehicle.notes}</p>
+                </div>
               </>
             )}
 
@@ -306,7 +308,7 @@ const VehicleDetailPage = () => {
                 <label className="text-sm font-medium text-gray-600">Ownership Type</label>
                 <div className="mt-1">
                   <span className={`px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${getOwnershipBadge(vehicle.ownership_type)}`}>
-                    {vehicle.ownership_type}
+                    {vehicle.ownership_type.charAt(0).toUpperCase() + vehicle.ownership_type.slice(1)}
                   </span>
                 </div>
               </div>
@@ -321,65 +323,91 @@ const VehicleDetailPage = () => {
               {vehicle.owner && (
                 <div>
                   <label className="text-sm font-medium text-gray-600">Owner</label>
-                  <p className="text-lg">{vehicle.owner.name}</p>
-                  <p className="text-sm text-gray-500">{vehicle.owner.email}</p>
+                  <div className="flex items-center mt-2">
+                    <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold mr-3">
+                        {vehicle.owner.name.charAt(0)}
+                    </div>
+                    <div>
+                        <p className="text-md font-medium text-gray-900">{vehicle.owner.name}</p>
+                        <p className="text-sm text-gray-500">{vehicle.owner.email}</p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
           {/* Driver Information Card */}
-          {vehicle.driver && (
+          {vehicle.driver ? (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-bold mb-4">Assigned Driver</h2>
               
               <div className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Name</label>
-                  <p className="text-lg">{vehicle.driver.user?.name || 'N/A'}</p>
+                <div className="flex items-center">
+                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold mr-3">
+                        {vehicle.driver.user?.name ? vehicle.driver.user.name.charAt(0) : 'D'}
+                    </div>
+                    <div>
+                        <p className="text-md font-medium text-gray-900">{vehicle.driver.user?.name || 'Unknown'}</p>
+                        <p className="text-sm text-gray-500">{vehicle.driver.user?.email}</p>
+                    </div>
                 </div>
                 
                 {vehicle.driver.license_number && (
                   <div>
                     <label className="text-sm font-medium text-gray-600">License Number</label>
-                    <p className="text-lg">{vehicle.driver.license_number}</p>
+                    <p className="text-lg font-mono">{vehicle.driver.license_number}</p>
                   </div>
                 )}
 
                 <Link 
                   to={`/drivers/${vehicle.driver.id}`}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  className="block text-center w-full py-2 bg-gray-50 text-blue-600 hover:text-blue-800 hover:bg-gray-100 text-sm font-medium rounded transition"
                 >
                   View Driver Details →
                 </Link>
               </div>
             </div>
+          ) : (
+             <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-bold mb-4">Assigned Driver</h2>
+                <div className="text-center py-4 bg-gray-50 rounded">
+                    <p className="text-gray-500">No driver assigned</p>
+                    <Link to={`/vehicles/${vehicle.id}/edit`} className="text-sm text-blue-600 hover:underline mt-2 inline-block">
+                        Assign Driver
+                    </Link>
+                </div>
+             </div>
           )}
 
           {/* System Information Card */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold mb-4">System Info</h2>
             
-            <div className="space-y-3 text-sm">
-              <div>
-                <label className="text-gray-600">Created</label>
-                <p className="text-gray-900">
+            <div className="space-y-3 text-sm border-t pt-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Created</span>
+                <span className="text-gray-900 font-medium">
                   {new Date(vehicle.created_at).toLocaleDateString()}
-                </p>
-                {vehicle.creator && (
-                  <p className="text-gray-500 text-xs">by {vehicle.creator.name}</p>
-                )}
+                </span>
               </div>
+              {vehicle.creator && (
+                 <div className="text-right text-xs text-gray-500">
+                    by {vehicle.creator.name}
+                 </div>
+              )}
 
-              <div>
-                <label className="text-gray-600">Last Updated</label>
-                <p className="text-gray-900">
+              <div className="flex justify-between mt-2">
+                <span className="text-gray-600">Last Updated</span>
+                <span className="text-gray-900 font-medium">
                   {new Date(vehicle.updated_at).toLocaleDateString()}
-                </p>
-                {vehicle.editor && (
-                  <p className="text-gray-500 text-xs">by {vehicle.editor.name}</p>
-                )}
+                </span>
               </div>
+              {vehicle.editor && (
+                 <div className="text-right text-xs text-gray-500">
+                    by {vehicle.editor.name}
+                 </div>
+              )}
             </div>
           </div>
 

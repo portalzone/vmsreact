@@ -18,6 +18,7 @@ Schema::create('expenses', function (Blueprint $table) {
     $table->foreignId('updated_by')->nullable()->constrained('users')->onDelete('set null');
     // Optional link to a maintenance record (nullable)
     $table->foreignId('maintenance_id')->nullable()->constrained('maintenances')->onDelete('set null');
+    $table->string('category')->nullable()->after('amount');
     $table->string('description');
     $table->decimal('amount', 10, 2);
     $table->date('date');

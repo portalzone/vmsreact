@@ -31,7 +31,7 @@
 return [
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
     'allowed_methods' => ['*'],
-    'allowed_origins' => ['http://localhost:5173', 'https://vmsreact.basepan.com'],
+    'allowed_origins' => ['http://localhost:5173', 'https://myvms.basepan.com','https://www.myvms.basepan.com',],
     'allowed_origins_patterns' => [],
     'allowed_headers' => ['*'],
     'exposed_headers' => [],
